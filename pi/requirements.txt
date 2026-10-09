@@ -1,0 +1,5 @@
+pyserial>=3.5
+requests>=2.31
+python-dotenv>=1.0
+Pillow>=10.0
+# Photos are taken with fswebcam: `sudo apt install fswebcam`
