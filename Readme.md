@@ -137,7 +137,7 @@ smart-garden/
 
 ## Team
 
-Built at HackKnight 2026.
+Built at Hack Knight 2026.
 
 - **Group A (hardware):** Arduino and sensors
 - **Group B (software):** Dashboard, weather check, and camera
