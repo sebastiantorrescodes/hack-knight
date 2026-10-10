@@ -10,15 +10,15 @@ DHT dht(DHT_PIN, DHT11);
 
 // Soil limits
 const int DRY_LIMIT = 150;
-const int WET_LIMIT = 450;a
+const int WET_LIMIT = 450;
 
 // Light limits
 const int DARK_LIMIT = 200;
 const int BRIGHT_LIMIT = 600;
 
 // Servo positions (adjust after testing)
-const int REST_ANGLE = 0;
-const int POUR_ANGLE = 45;
+const int REST_ANGLE = 175;
+const int POUR_ANGLE = 130;
 const int STEP_SIZE = 1;     // degrees per step
 const int STEP_DELAY = 25;   // ms between steps (higher = slower)
 
