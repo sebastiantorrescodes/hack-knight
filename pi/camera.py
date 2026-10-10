@@ -123,9 +123,11 @@ def run():
             continue
 
         now = time.monotonic()
-        if now >= next_photo:
+        requested = config.PHOTO_REQUEST_FILE.exists()
+        if now >= next_photo or requested:
             take_photo(frame)
             next_photo = now + config.PHOTO_INTERVAL
+            config.PHOTO_REQUEST_FILE.unlink(missing_ok=True)
 
         if now >= next_send:
             result = send_frame(session, frame)

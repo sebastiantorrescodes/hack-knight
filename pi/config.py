@@ -36,7 +36,7 @@ PHOTO_DIR = Path(os.getenv("PHOTO_DIR", BASE_DIR / "data" / "photos"))
 READ_INTERVAL = _int("READ_INTERVAL", 2)          # matches Arduino delay(2000)
 SMOOTHING_WINDOW = _int("SMOOTHING_WINDOW", 5)    # readings averaged per stored value
 PHOTO_INTERVAL = _int("PHOTO_INTERVAL", 3600)     # one photo per hour
-UPLOAD_INTERVAL = _int("UPLOAD_INTERVAL", 60)
+UPLOAD_INTERVAL = _int("UPLOAD_INTERVAL", 10)        # reader.py stores a reading about every 10s
 COMMAND_POLL_INTERVAL = _int("COMMAND_POLL_INTERVAL", 15)
 UPLOAD_MAX_RETRIES = _int("UPLOAD_MAX_RETRIES", 5)
 
@@ -55,6 +55,11 @@ STREAM_FPS = _float("STREAM_FPS", 5)                     # while someone is watc
 STREAM_IDLE_SECONDS = _float("STREAM_IDLE_SECONDS", 10)  # one frame this often while nobody is
 STREAM_WIDTH = _int("STREAM_WIDTH", 640)                 # frames are scaled down to this width
 STREAM_QUALITY = _int("STREAM_QUALITY", 70)              # JPEG quality, 1-100
+
+# uploader.py creates this file to ask camera.py (which owns the webcam) for a photo right now
+PHOTO_REQUEST_FILE = DB_PATH.parent / "photo_request"
+# Set to 1 once the watering servo is wired up; until then water commands are reported as failed
+WATERING_ENABLED = _int("WATERING_ENABLED", 0) == 1
 
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)
