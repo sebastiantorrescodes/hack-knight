@@ -1,6 +1,6 @@
 # Smart Garden 🌱
 
-A smart plant care system built for **HackKnight 2026: Best Environmental Hack**.
+A smart plant care system built for **Hack Knight 2026: Best Environmental Hack**.
 
 Most people overwater or underwater their plants, and farms waste huge amounts of water on irrigation. Smart Garden monitors soil moisture and light in real time and is designed to water only when the soil actually needs it, and to skip watering when rain is forecast.
 
