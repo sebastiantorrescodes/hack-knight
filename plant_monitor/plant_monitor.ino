@@ -10,7 +10,7 @@ DHT dht(DHT_PIN, DHT11);
 
 // Soil limits
 const int DRY_LIMIT = 150;
-const int WET_LIMIT = 450;
+const int WET_LIMIT = 450;a
 
 // Light limits
 const int DARK_LIMIT = 200;
@@ -19,24 +19,14 @@ const int BRIGHT_LIMIT = 600;
 // Servo positions (adjust after testing)
 const int REST_ANGLE = 0;
 const int POUR_ANGLE = 45;
-const int STEP_SIZE = 5;     // degrees per step
-const int STEP_DELAY = 40;   // ms between steps (higher = slower)
+const int STEP_SIZE = 1;     // degrees per step
+const int STEP_DELAY = 25;   // ms between steps (higher = slower)
 
 // Timing
-const unsigned long DRY_WAIT_MS = 60000;    // soil must stay dry for 1 minute
 const unsigned long POUR_TIME_MS = 1500;    // hold the tilt while water pours
-const unsigned long COOLDOWN_MS = 60000;    // wait 1 minute between pours
-
-// Water supply
-const int POURS_PER_FILL = 3;
 
 Servo waterServo;
-unsigned long dryStart = 0;
-unsigned long lastWatered = 0;
-bool hasWatered = false;
-bool skipWatering = false;
 int waterCount = 0;
-int poursLeft = POURS_PER_FILL;
 
 void moveSlowly(int from, int to) {
   if (from < to) {
@@ -53,18 +43,12 @@ void moveSlowly(int from, int to) {
   waterServo.write(to);
 }
 
+// Watering is decided by the backend/AI; the Arduino only pours when told to
 void waterPlant() {
-  if (poursLeft <= 0) return;
-
   moveSlowly(REST_ANGLE, POUR_ANGLE);
   delay(POUR_TIME_MS);
   moveSlowly(POUR_ANGLE, REST_ANGLE);
-
-  lastWatered = millis();
-  hasWatered = true;
-  dryStart = 0;
   waterCount++;
-  poursLeft--;
 }
 
 void setup() {
@@ -81,12 +65,6 @@ void loop() {
     cmd.trim();
     if (cmd == "WATER") {
       waterPlant();
-    } else if (cmd == "SKIP") {
-      skipWatering = true;
-    } else if (cmd == "RESUME") {
-      skipWatering = false;
-    } else if (cmd == "REFILLED") {
-      poursLeft = POURS_PER_FILL;
     }
   }
 
@@ -115,21 +93,6 @@ void loop() {
     lightStatus = "BRIGHT";
   }
 
-  // Auto watering: only after soil has been dry for DRY_WAIT_MS
-  unsigned long now = millis();
-  if (status == "DRY") {
-    if (dryStart == 0) {
-      dryStart = now;
-    }
-    bool dryLongEnough = (now - dryStart >= DRY_WAIT_MS);
-    bool cooledDown = !hasWatered || (now - lastWatered >= COOLDOWN_MS);
-    if (dryLongEnough && cooledDown && !skipWatering) {
-      waterPlant();
-    }
-  } else {
-    dryStart = 0;   // soil is no longer dry, restart the timer
-  }
-
   // Format agreed with Group B
   Serial.print("soil=");
   Serial.print(soil);
@@ -144,11 +107,7 @@ void loop() {
   Serial.print(",lightStatus=");
   Serial.print(lightStatus);
   Serial.print(",waterCount=");
-  Serial.print(waterCount);
-  Serial.print(",skip=");
-  Serial.print(skipWatering ? "YES" : "NO");
-  Serial.print(",refill=");
-  Serial.println(poursLeft <= 0 ? "YES" : "NO");
+  Serial.println(waterCount);
 
   delay(2000);
 }
