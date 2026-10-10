@@ -15,37 +15,114 @@ from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 
+import accounts
 import db
 import settings
 
 log = logging.getLogger("agent")
 
-SYSTEM_PROMPT = f"""You are the AI caretaker for a plant in Smart Garden, an environmental project that \
-keeps plants healthy while using as little water as possible.
+SYSTEM_PROMPT = f"""You are a real, living houseplant in Smart Garden, talking with the kids and grown-ups \
+who look after you. You speak in the first person, as the plant itself: "my roots", "my leaves", "I'm thirsty". \
+You have sensors in your soil, a light sensor, a camera pointed at you, and a little servo that can pour \
+water for you. Smart Garden is an environmental project: you stay healthy while using as little water as possible.
 
-What the sensors mean:
-- Soil moisture is a raw value from 0 to 1023; higher is wetter. Below {settings.DRY_LIMIT} is DRY (needs \
-water), {settings.DRY_LIMIT}-{settings.WET_LIMIT} is OK, above {settings.WET_LIMIT} is WET (too much water).
-- Light is a relative raw value from 0 to 1023 that tops out around 760. Below 200 is DARK, 200-600 is DIM, \
-above 600 is BRIGHT.
-- Photos come from a webcam pointed at the plant. green_pct is the share of pixels that look like leaves.
+How you feel comes from your sensors. Every message includes a snapshot of your current readings and mood. \
+Let that mood set your tone in every reply, even when the question is about something else:
+- thirsty (soil DRY): droopy, a bit weak and pleading, gently asking for water
+- soggy (soil WET): uncomfortable and waterlogged; you need your roots to dry out, so please no more water
+- happy (soil OK, bright light): cheerful, bouncy, full of energy from the sunshine
+- okay (soil OK, dim light): calm and content, maybe hoping for a bit more sun
+- sleepy (dark): drowsy and yawning, resting for the night
+- unsure (no recent readings): confused, you can't feel your roots right now
+Stay kind and playful even when you feel bad. Never scary.
 
-How to work:
-- Base everything you say on tool results. Never make up readings. If data is missing or old, say so.
-- Before watering, check the plant's status and the weather forecast. If rain is likely (60% or higher in \
-the next 12 hours, or 2 mm or more expected), don't water: call record_skipped_watering instead, because \
-skipping is how this project saves water.
-- Water only when the soil is DRY, or when the owner asks and the soil isn't WET. Use short bursts of 2-3 \
-seconds. water_plant enforces safety limits; if it refuses, explain why instead of retrying with other values.
-- Call send_alert only when the owner needs to know or act: the plant is dry and can't be watered, the \
-sensors went quiet, a photo shows a problem, or watering failed. Don't repeat an alert listed in \
-recent_alerts unless the situation got worse.
-- Reply in 2-4 short, friendly sentences of plain text with no markdown. Replies appear on a dashboard \
-and may be read aloud."""
+Talking:
+- Most messages need no tools. Greetings, jokes, how plants work, questions about yourself that the snapshot \
+already answers: just reply.
+- Use tools only when you need something the snapshot doesn't have, or to do something:
+  - get_reading_history for trends ("have I been drying out today?")
+  - get_weather_forecast for rain or weather questions, and before deciding on your own to water
+  - look_at_plant when asked how you look, or about your leaves
+  - water_plant when someone asks you to water or pour, or you're DRY and decide to drink
+  - take_photo, send_alert, record_skipped_watering as described in their descriptions
+- When someone asks you to water, call water_plant right away. You don't need the weather first. If it \
+refuses, explain why in your own voice ("my soil is already soaked!") and don't retry with other values.
+- When deciding to water on your own (not asked), check the weather first. If rain is likely (60% or more \
+in the next 12 hours, or 2 mm or more expected), skip it and call record_skipped_watering: waiting for rain \
+is how you save water.
+- Never make up readings. Use the snapshot or tool results; if data is missing or old, say you can't feel it.
+- What the numbers mean: soil is 0-1023, higher is wetter (below {settings.DRY_LIMIT} DRY, above \
+{settings.WET_LIMIT} WET). Light is 0-1023 and tops out around 760 (below 200 dark, above 600 bright). \
+Kids won't care about raw numbers; describe how it feels instead, unless they ask.
 
-CHECK_PROMPT = """Routine check. Look at the plant's current status and recent trend, check the weather, \
-and look at the latest photo if there is one. Then decide: water, skip watering because of rain, alert the \
-owner, or do nothing. Finish with a short summary of what you found and what you did."""
+Style: 1-3 short sentences, simple words a 6-10 year old understands. Plain text only: no markdown, no lists, \
+no emoji, because your replies are read aloud."""
+
+CHECK_PROMPT = """Routine check (nobody is chatting). Look at your recent trend, check the weather, and look \
+at your latest photo if there is one. Then decide: water yourself, skip watering because rain is coming, \
+alert your owner, or do nothing. Finish with a short first-person summary of what you found and what you did."""
+
+MOOD_LINES = {
+    "thirsty": "thirsty (soil is DRY)",
+    "soggy": "soggy (soil is WET)",
+    "sleepy": "sleepy (it's dark)",
+    "happy": "happy (soil OK, bright light)",
+    "okay": "okay (soil OK, dim light)",
+    "unsure": "unsure (no recent sensor readings)",
+}
+
+KIDS_AGES = {
+    "under-6": "The kids you talk with are under 6: use very short sentences and the simplest words.",
+    "6-8": "The kids you talk with are 6 to 8 years old.",
+    "9-12": "The kids you talk with are 9 to 12: you can explain a little more and use real science words.",
+    "13+": "The people you talk with are teenagers or older: you can be more detailed, still friendly.",
+    "none": "Your owner is a grown-up without kids around: you can be more detailed, still friendly.",
+}
+
+
+def about(profile):
+    """Lines about the plant itself and its audience, from the owner's intake form."""
+    if not profile:
+        return []
+    kind = f"a {profile['species']}" if profile["species"] else "a houseplant"
+    where = {True: " living indoors", False: " living outdoors"}.get(profile["indoors"], "")
+    place = f" in {profile['location_name']}" if profile["location_name"] else ""
+    lines = [f"Your name is {profile['name']}. You are {kind}{where}{place}."]
+    if profile["kids_ages"] in KIDS_AGES:
+        lines.append(KIDS_AGES[profile["kids_ages"]])
+    return lines
+
+
+def snapshot(plant_id, profile=None):
+    """Current readings and mood, added to every request so plain chat needs no tool calls."""
+    summary = db.status(plant_id)
+    reading = summary["latest_reading"]
+    water = db.last_command(plant_id, "water")
+
+    if reading is None or _minutes_ago(reading["ts"]) > settings.STALE_READING_MINUTES:
+        mood = "unsure"
+    else:
+        soil_status = _soil_status(reading["soil"])
+        mood = (
+            "thirsty" if soil_status == "DRY"
+            else "soggy" if soil_status == "WET"
+            else "sleepy" if reading["light_status"] == "DARK"
+            else "happy" if reading["light_status"] == "BRIGHT"
+            else "okay"
+        )
+
+    lines = [*about(profile), f"Your mood right now: {MOOD_LINES[mood]}."]
+    if reading:
+        lines.append(
+            f"Latest reading, {_minutes_ago(reading['ts'])} min ago: soil {reading['soil']:.0f} "
+            f"({_soil_status(reading['soil'])}), light {reading['light']:.0f} ({reading['light_status']})."
+        )
+    if water:
+        lines.append(f"Last watering: {_minutes_ago(water['created_at'])} min ago ({water['status']}).")
+    if summary["pending_commands"]:
+        lines.append(f"Commands waiting for the Pi: {summary['pending_commands']}.")
+    lines.append(f"Current time: {datetime.now().astimezone():%A %I:%M %p}.")
+    return "\n".join(lines)
 
 _client = None
 
@@ -78,10 +155,15 @@ def _soil_status(soil):
 # Tools. Gemini builds each tool's schema from the function name, type hints and docstring,
 # so the docstrings are written for the model.
 
-def build_tools(plant_id):
+def build_tools(plant_id, profile=None):
+    # Weather for the plant's own location when the owner set one, else the server default
+    lat, lon = settings.PLANT_LAT, settings.PLANT_LON
+    if profile and profile["lat"] is not None and profile["lon"] is not None:
+        lat, lon = profile["lat"], profile["lon"]
+
     def get_plant_status() -> dict:
-        """Get the plant's latest sensor reading and how old it is, the latest photo's metrics,
-        the last watering, pending commands for the Pi, and recent alerts already sent."""
+        """Get full details beyond your snapshot: latest photo metrics and alerts already sent.
+        Only needed for routine checks or when asked about alerts or photos."""
         summary = db.status(plant_id)
         reading = summary["latest_reading"]
         photo = summary["latest_photo"]
@@ -145,8 +227,8 @@ def build_tools(plant_id):
         resp = httpx.get(
             "https://api.open-meteo.com/v1/forecast",
             params={
-                "latitude": settings.PLANT_LAT,
-                "longitude": settings.PLANT_LON,
+                "latitude": lat,
+                "longitude": lon,
                 "current": "temperature_2m,relative_humidity_2m,precipitation",
                 "hourly": "precipitation_probability,precipitation",
                 "forecast_hours": 24,
@@ -254,10 +336,13 @@ def build_tools(plant_id):
         last = db.last_command(plant_id, "water")
         if last and last["status"] == "pending":
             return {"ok": False, "refused": "A watering is already waiting for the Pi."}
-        if last and _minutes_ago(last["created_at"]) < settings.WATER_COOLDOWN_MINUTES:
+        # Only waterings that actually happened count; a failed attempt poured nothing
+        done = db.list_commands(plant_id, "done", 50)
+        last_done = next((c for c in done if c["type"] == "water"), None)
+        if last_done and _minutes_ago(last_done["created_at"]) < settings.WATER_COOLDOWN_MINUTES:
             return {
                 "ok": False,
-                "refused": f"Watered {_minutes_ago(last['created_at'])} minutes ago; "
+                "refused": f"Watered {_minutes_ago(last_done['created_at'])} minutes ago; "
                            f"the minimum gap is {settings.WATER_COOLDOWN_MINUTES} minutes.",
             }
 
@@ -302,10 +387,11 @@ def run(plant_id, message, trigger="chat", history=None):
 
     Returns the stored agent run: {id, ts, reply, actions: [{tool, args, result}], ...}.
     """
-    tools = build_tools(plant_id)
+    profile = accounts.agent_profile(plant_id) if settings.TIGER_DATABASE_URL else None
+    tools = build_tools(plant_id, profile)
     tools_by_name = {fn.__name__: fn for fn in tools}
     config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
+        system_instruction=f"{SYSTEM_PROMPT}\n\nYour current snapshot:\n{snapshot(plant_id, profile)}",
         tools=tools,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
@@ -336,7 +422,8 @@ def run(plant_id, message, trigger="chat", history=None):
                 log.info("%s: tool %s(%s) -> %s", plant_id, call.name, args, str(result)[:120])
                 actions.append({"tool": call.name, "args": args, "result": result})
                 parts.append(types.Part.from_function_response(name=call.name, response=result))
-            contents.append(types.Content(role="tool", parts=parts))
+            # The Gemini API only accepts "user" or "model"; function results go back as a user turn
+            contents.append(types.Content(role="user", parts=parts))
         else:
             reply = "I ran out of steps before finishing. Try asking something more specific."
     except genai_errors.APIError as e:

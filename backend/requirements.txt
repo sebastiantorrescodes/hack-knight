@@ -8,3 +8,5 @@ httpx>=0.27
 # Tiger Data (Postgres) for sensor readings
 psycopg[binary]>=3.2
 psycopg-pool>=3.2
+# Verifying Clerk session tokens
+pyjwt[crypto]>=2.8

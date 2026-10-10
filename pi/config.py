@@ -58,8 +58,10 @@ STREAM_QUALITY = _int("STREAM_QUALITY", 70)              # JPEG quality, 1-100
 
 # uploader.py creates this file to ask camera.py (which owns the webcam) for a photo right now
 PHOTO_REQUEST_FILE = DB_PATH.parent / "photo_request"
-# Set to 1 once the watering servo is wired up; until then water commands are reported as failed
-WATERING_ENABLED = _int("WATERING_ENABLED", 0) == 1
+# uploader.py creates this file to ask reader.py (which owns the serial port) to send WATER to the Arduino
+WATER_REQUEST_FILE = DB_PATH.parent / "water_request"
+# Set to 0 to refuse water commands, e.g. while the servo isn't attached
+WATERING_ENABLED = _int("WATERING_ENABLED", 1) == 1
 
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)

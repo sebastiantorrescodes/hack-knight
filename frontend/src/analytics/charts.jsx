@@ -12,17 +12,16 @@ import {
 import { DARK_LIMIT, BRIGHT_LIMIT, DRY_LIMIT, WET_LIMIT } from "../plant";
 import { formatNumber, formatTime, tickFormatter } from "./ranges";
 
-// Chart tokens (light). Series hues are validated categorical slots; text never uses them.
+// Chart tokens, defined in styles.css so they follow light/dark mode. Text never uses the series hues.
 export const C = {
-  soil: "#2a78d6",
-  light: "#eb6834",
-  leaf: "#1baf7a",
-  surface: "#ffffff",
-  grid: "#e1e0d9",
-  axis: "#c3c2b7",
-  muted: "#898781",
-  ink: "#0b0b0b",
-  ink2: "#52514e",
+  soil: "var(--chart-soil)",
+  light: "var(--chart-light)",
+  leaf: "var(--chart-leaf)",
+  surface: "var(--chart-surface)",
+  grid: "var(--chart-grid)",
+  axis: "var(--chart-axis)",
+  muted: "var(--chart-muted)",
+  ink2: "var(--muted-foreground)",
 };
 
 const HEIGHT = 260; // includes the x-axis band
@@ -68,13 +67,13 @@ function Tip({ active, payload, label, rows }) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
   return (
-    <div className="a-tip">
-      <div className="a-tip-time">{formatTime(label)}</div>
+    <div className="glass-strong min-w-40 rounded-xl px-3 py-2 text-[13px]">
+      <div className="mb-1 text-muted-foreground">{formatTime(label)}</div>
       {rows(point).map((r) => (
-        <div key={r.name} className="a-tip-row">
-          {r.color && <span className="a-swatch" style={{ background: r.color }} />}
-          <span className="a-tip-name">{r.name}</span>
-          <span className="a-tip-value">{r.value}</span>
+        <div key={r.name} className="flex items-center gap-1.5">
+          {r.color && <span className="size-2.5 flex-none rounded-[3px]" style={{ background: r.color }} />}
+          <span className="text-muted-foreground">{r.name}</span>
+          <span className="ml-auto font-semibold tabular-nums">{r.value}</span>
         </div>
       ))}
     </div>
@@ -107,14 +106,14 @@ export function SoilChart({ points, waterings, range, now }) {
           dataKey="soilRange"
           stroke="none"
           fill={C.soil}
-          fillOpacity={0.12}
+          fillOpacity={0.14}
           isAnimationActive={false}
           activeDot={false}
         />
         <Line
           dataKey="soil"
           stroke={C.soil}
-          strokeWidth={2}
+          strokeWidth={2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
           dot={false}
@@ -156,7 +155,7 @@ export function LightChart({ points, range, now }) {
           stroke={C.light}
           strokeWidth={2}
           fill={C.light}
-          fillOpacity={0.1}
+          fillOpacity={0.14}
           dot={false}
           activeDot={endDot(C.light)}
           isAnimationActive={false}

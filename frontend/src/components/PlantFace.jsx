@@ -57,7 +57,7 @@ export default function PlantFace({ mood }) {
   const leafDark = droopy ? "#8f8233" : "#2e7d32";
 
   return (
-    <svg className={`plant-face mood-${mood}`} viewBox="0 0 200 230" role="img" aria-label={`The plant looks ${mood}`}>
+    <svg className={`plant-face mood-${mood} h-auto w-[min(300px,80%)] drop-shadow-xl`} viewBox="0 0 200 230" role="img" aria-label={`The plant looks ${mood}`}>
       <g className="leaves" style={{ transformOrigin: "100px 108px" }}>
         <path d="M100 108 C100 80 100 60 100 40" stroke={leafDark} strokeWidth="6" fill="none" strokeLinecap="round" />
         <g className="leaf-left" style={{ transformOrigin: "100px 78px" }}>
