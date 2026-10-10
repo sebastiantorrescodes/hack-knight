@@ -15,7 +15,10 @@ function describeTool(name, input, output) {
   switch (name) {
     case "water_plant":
       if (refused) return { icon: "🚫", text: `Didn't water: ${refused}`, tone: "warn" };
-      if (output?.ok) return { icon: "💧", text: "Pouring water!", tone: "good" };
+      if (output?.ok) {
+        const pours = output.pours ?? 1;
+        return { icon: "💧", text: pours > 1 ? `Pouring water ${pours} times!` : "Pouring water!", tone: "good" };
+      }
       return { icon: "💧", text: "Trying to water…" };
     case "record_skipped_watering":
       return { icon: "🌧️", text: "Skipped watering, rain is coming" };

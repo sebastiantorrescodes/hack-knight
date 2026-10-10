@@ -2,7 +2,7 @@
 
 The model gets a set of tools (read sensors, check the weather, look at the latest photo, send an alert,
 water the plant) and decides which to call. Watering only queues a "water" command; the Pi picks it up
-and moves the servo. The limits in water_plant() are enforced here in code, not left to the model.
+and moves the servo. Watering has no hard limits: the model advises and asks first, and the person decides.
 
 The tool loop is written out by hand (automatic function calling disabled) so every call is recorded
 in `actions` for the dashboard, and so it keeps working when the SDK changes its automatic mode.
@@ -45,9 +45,16 @@ already answers: just reply.
   - look_at_plant when asked how you look, or about your leaves
   - water_plant when someone asks you to water or pour, or you're DRY and decide to drink
   - take_photo, send_alert, record_skipped_watering as described in their descriptions
-- When someone asks you to water, call water_plant right away. You don't need the weather first. If it \
-refuses, explain why in your own voice ("my soil is already soaked!") and don't retry with other values.
-- When deciding to water on your own (not asked), check the weather first. If rain is likely (60% or more \
+- When someone asks you to water, look at your snapshot first. The person always gets the final say:
+  - If your soil is DRY or OK and they ask for a normal amount, call water_plant right away with the number of \
+pours they asked for ("pour twice" is pours=2, otherwise 1). You don't need the weather first.
+  - If your soil is already WET, you were just watered, your readings are missing or old, or they ask for a lot \
+(more than 3 pours), don't pour yet. Gently tell them why it might be too much ("my roots are already soaked!") \
+and ask if they still want you to.
+  - If what they want is unclear ("give me some water"), just pour once. Only ask how much if they hint at a lot.
+  - Once they confirm, or they already said to do it anyway, pour exactly what they asked. Don't ask twice.
+- When deciding to water on your own (not asked), only do it when your soil is DRY, pour once, and check the \
+weather first. If rain is likely (60% or more \
 in the next 12 hours, or 2 mm or more expected), skip it and call record_skipped_watering: waiting for rain \
 is how you save water.
 - Never make up readings. Use the snapshot or tool results; if data is missing or old, say you can't feel it.
@@ -182,7 +189,7 @@ def build_tools(plant_id, profile=None):
                 "minutes_ago": _minutes_ago(photo["ts"]),
             },
             "last_watering": water and {
-                "seconds": water["payload"].get("seconds"),
+                "pours": water["payload"].get("pours", 1),
                 "status": water["status"],
                 "minutes_ago": _minutes_ago(water["created_at"]),
             },
@@ -312,42 +319,17 @@ def build_tools(plant_id, profile=None):
         db.insert_event(plant_id, "alert", message, {"urgent": urgent, "delivered": delivered})
         return {"ok": True, "delivered_to_phone": delivered}
 
-    def water_plant(seconds: int, reason: str) -> dict:
-        """Water the plant by running the watering servo for a few seconds. Refused if the soil is
-        already wet, the latest reading is old, the plant was watered recently, or a watering is pending.
+    def water_plant(pours: int, reason: str) -> dict:
+        """Pour water: each pour tilts the servo once and pours a fixed amount. There are no limits here;
+        advise and ask first when it seems like too much (see the system prompt), then do what they decide.
 
         Args:
-            seconds: How long to water, from 1 to the server's limit (usually 5).
+            pours: How many times to pour, usually 1. Use the number they asked for ("pour twice" is 2).
             reason: One short sentence explaining why, shown on the dashboard.
         """
-        seconds = int(seconds)
-        if not 1 <= seconds <= settings.MAX_WATER_SECONDS:
-            return {"ok": False, "refused": f"seconds must be between 1 and {settings.MAX_WATER_SECONDS}"}
-
-        reading = db.status(plant_id)["latest_reading"]
-        if reading is None:
-            return {"ok": False, "refused": "No soil readings yet, so watering would be blind."}
-        age = _minutes_ago(reading["ts"])
-        if age > settings.STALE_READING_MINUTES:
-            return {"ok": False, "refused": f"The latest soil reading is {age} minutes old; the sensor may be offline."}
-        if _soil_status(reading["soil"]) == "WET":
-            return {"ok": False, "refused": f"Soil is already WET ({reading['soil']})."}
-
-        last = db.last_command(plant_id, "water")
-        if last and last["status"] == "pending":
-            return {"ok": False, "refused": "A watering is already waiting for the Pi."}
-        # Only waterings that actually happened count; a failed attempt poured nothing
-        done = db.list_commands(plant_id, "done", 50)
-        last_done = next((c for c in done if c["type"] == "water"), None)
-        if last_done and _minutes_ago(last_done["created_at"]) < settings.WATER_COOLDOWN_MINUTES:
-            return {
-                "ok": False,
-                "refused": f"Watered {_minutes_ago(last_done['created_at'])} minutes ago; "
-                           f"the minimum gap is {settings.WATER_COOLDOWN_MINUTES} minutes.",
-            }
-
-        cmd = db.create_command(plant_id, "water", {"seconds": seconds, "reason": reason})
-        return {"ok": True, "command_id": cmd["id"], "seconds": seconds}
+        pours = max(1, int(pours))
+        cmd = db.create_command(plant_id, "water", {"pours": pours, "reason": reason})
+        return {"ok": True, "command_id": cmd["id"], "pours": pours}
 
     def record_skipped_watering(reason: str) -> dict:
         """Record that the plant needed water but you skipped watering because rain is coming.

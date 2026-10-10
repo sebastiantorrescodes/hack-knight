@@ -161,7 +161,7 @@ class ReadingBatch(BaseModel):
 class CommandIn(BaseModel):
     plant_id: str = Field(pattern=PLANT_ID)
     type: CommandType
-    payload: dict = Field(default_factory=dict, description='e.g. {"seconds": 3} for water')
+    payload: dict = Field(default_factory=dict, description='e.g. {"pours": 2} for water')
 
 
 class CommandResult(BaseModel):

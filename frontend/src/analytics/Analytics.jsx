@@ -54,7 +54,7 @@ function activityRows(runs, events, commands) {
     ...(commands || []).map((c) => ({
       ts: c.created_at,
       kind: c.type === "water" ? "Watering" : "Photo request",
-      text: c.payload?.reason || (c.type === "water" ? `${c.payload?.seconds ?? "?"}s` : ""),
+      text: c.payload?.reason || (c.type === "water" ? `${c.payload?.pours ?? 1} pour(s)` : ""),
       extra: `${c.status}${c.message ? `: ${c.message}` : ""}`,
     })),
   ];

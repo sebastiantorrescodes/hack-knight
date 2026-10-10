@@ -83,19 +83,28 @@ def take_photo_now():
 WATER_WAIT_SECONDS = 15
 
 
-def water(payload):
-    """Ask reader.py to send WATER to the Arduino and wait until it has. Returns (success, message)."""
-    if not config.WATERING_ENABLED:
-        return False, "Watering is turned off on the Pi (WATERING_ENABLED=0)"
+def send_water():
+    """Ask reader.py to send one WATER to the Arduino and wait until it has."""
     config.WATER_REQUEST_FILE.touch()
     deadline = time.monotonic() + WATER_WAIT_SECONDS
     while time.monotonic() < deadline:
         if not config.WATER_REQUEST_FILE.exists():
-            # The Arduino pours a fixed amount per WATER command; payload["seconds"] isn't used yet
-            return True, "Poured water"
+            return True
         time.sleep(0.5)
     config.WATER_REQUEST_FILE.unlink(missing_ok=True)  # don't pour later by surprise
-    return False, "reader.py didn't pick up the request; is it running and connected to the Arduino?"
+    return False
+
+
+def water(payload):
+    """Pour payload["pours"] times (default 1); the Arduino pours a fixed amount per WATER. Returns (success, message)."""
+    if not config.WATERING_ENABLED:
+        return False, "Watering is turned off on the Pi (WATERING_ENABLED=0)"
+    pours = max(1, int(payload.get("pours", 1)))
+    for done in range(pours):
+        if not send_water():
+            return False, (f"Poured {done} of {pours}; reader.py didn't pick up the request. "
+                           "Is it running and connected to the Arduino?")
+    return True, f"Poured water {pours} time{'s' if pours > 1 else ''}"
 
 
 def run_commands(api):

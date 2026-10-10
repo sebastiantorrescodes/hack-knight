@@ -34,9 +34,7 @@ PLANT_LON = float(os.getenv("PLANT_LON", -73.8203))
 # Phone alerts via ntfy.sh: install the ntfy app and subscribe to this topic. Empty = alerts are only logged.
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "")
 
-# Watering limits the agent cannot override
-MAX_WATER_SECONDS = int(os.getenv("MAX_WATER_SECONDS", 5))
-WATER_COOLDOWN_MINUTES = int(os.getenv("WATER_COOLDOWN_MINUTES", 60))
+# Readings older than this count as missing (the plant feels "unsure")
 STALE_READING_MINUTES = int(os.getenv("STALE_READING_MINUTES", 30))
 
 # Plant voice (ElevenLabs). Pick a voice in the ElevenLabs Voice Library and copy its voice ID.
