@@ -50,5 +50,11 @@ BRIGHT_LIMIT = _int("BRIGHT_LIMIT", 600)
 CAMERA_DEVICE = os.getenv("CAMERA_DEVICE", "/dev/video0")
 CAMERA_RESOLUTION = os.getenv("CAMERA_RESOLUTION", "1280x720")
 
+# Live view (camera.py sends frames to the backend's /frames)
+STREAM_FPS = _float("STREAM_FPS", 5)                     # while someone is watching the dashboard
+STREAM_IDLE_SECONDS = _float("STREAM_IDLE_SECONDS", 10)  # one frame this often while nobody is
+STREAM_WIDTH = _int("STREAM_WIDTH", 640)                 # frames are scaled down to this width
+STREAM_QUALITY = _int("STREAM_QUALITY", 70)              # JPEG quality, 1-100
+
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)
