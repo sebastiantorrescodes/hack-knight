@@ -304,8 +304,9 @@ function YourPlant({ onBack, onSubmit, saving, error }) {
 /**
  * The intake form: "About you" (stored on the user), then "Your plant" (claims the Pi's plant id).
  * `user` is /me's user row; people who already answered step 1 start at step 2 (e.g. adding a plant).
+ * Plants are shared, so with `skipPlant` (a plant already exists) step 1 finishes onboarding on its own.
  */
-export default function Onboarding({ user, onDone, onCancel }) {
+export default function Onboarding({ user, skipPlant, onDone, onCancel }) {
   const onboarded = !!user?.onboarded_at;
   const [step, setStep] = useState(onboarded ? 2 : 1);
   const [profile, setProfile] = useState(null);
@@ -347,14 +348,21 @@ export default function Onboarding({ user, onDone, onCancel }) {
         {step === 1 ? (
           <AboutYou
             initial={profile ?? user}
-            onNext={(p) => {
+            onNext={async (p) => {
               setProfile(p);
-              setStep(2);
+              if (!skipPlant) return setStep(2);
+              try {
+                await saveProfile(p);
+                onDone(null);
+              } catch (e) {
+                setError(e.message);
+              }
             }}
           />
         ) : (
           <YourPlant onBack={onboarded ? null : () => setStep(1)} onSubmit={finish} saving={saving} error={error} />
         )}
+        {step === 1 && error && <p className="rounded-2xl bg-ios-red/10 px-4 py-2.5 text-sm text-ios-red">{error}</p>}
       </section>
     </CenteredScreen>
   );

@@ -125,8 +125,9 @@ def pi_or_owner(
 
 
 def check_owner(plant_id, user_id):
+    """Plants are shared: any signed-in user can view and control any claimed plant."""
     plant = accounts.get_plant(plant_id)
-    if plant is None or plant["owner_id"] != user_id:
+    if plant is None:
         raise HTTPException(404, "Plant not found")
     return plant
 
@@ -429,14 +430,16 @@ def put_profile(profile: Profile, user_id: str = Depends(auth.current_user)):
 
 @app.post("/plants")
 def claim_plant(plant: PlantClaim, user_id: str = Depends(auth.current_user)):
-    """Tie a Pi's plant id to the signed-in user. First come, first served."""
+    """Tie a Pi's plant id to the signed-in user. Plants are shared, so an already-claimed id is just returned."""
     existing = accounts.get_plant(plant.id)
     if existing and existing["owner_id"] == user_id:
         return accounts.update_plant(plant.id, plant.model_dump(exclude={"id"}, exclude_unset=True))
+    if existing:
+        return existing
     try:
         created = accounts.claim_plant(user_id, plant.id, plant.model_dump(exclude={"id"}))
-    except accounts.AlreadyClaimed:
-        raise HTTPException(409, f"Plant id {plant.id!r} already belongs to someone else")
+    except accounts.AlreadyClaimed:  # someone claimed it a moment ago
+        return accounts.get_plant(plant.id)
     log.info("plant   %s: claimed by %s", plant.id, user_id)
     return created
 

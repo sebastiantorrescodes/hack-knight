@@ -101,8 +101,9 @@ def save_profile(clerk_id, profile):
 # Plants
 
 def list_plants(owner_id):
+    """Every plant, not just the user's own: plants are shared with all signed-in users."""
     with _connection() as conn:
-        rows = conn.execute("SELECT * FROM plants WHERE owner_id = %s ORDER BY created_at", (owner_id,)).fetchall()
+        rows = conn.execute("SELECT * FROM plants ORDER BY created_at").fetchall()
     return [_iso(r, "created_at") for r in rows]
 
 

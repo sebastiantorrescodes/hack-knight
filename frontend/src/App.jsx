@@ -75,9 +75,10 @@ function Home() {
     return (
       <Onboarding
         user={me.user}
+        skipPlant={me.plants.length > 0 && !adding}
         onCancel={adding ? () => setAdding(false) : undefined}
         onDone={(plant) => {
-          select(plant.id);
+          if (plant) select(plant.id);
           setAdding(false);
           load();
         }}
