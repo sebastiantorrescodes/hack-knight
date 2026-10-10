@@ -62,6 +62,12 @@ def run():
 
     while True:
         try:
+            if config.WATER_REQUEST_FILE.exists():
+                # The Arduino tilts the servo, pours, and returns to rest (see waterPlant() in plant_monitor.ino)
+                ser.write(b"WATER\n")
+                ser.flush()
+                config.WATER_REQUEST_FILE.unlink(missing_ok=True)
+                log.info("Sent WATER to the Arduino")
             raw = ser.readline().decode("utf-8", errors="ignore")
         except serial.SerialException as e:
             log.warning("Serial error (%s), reconnecting", e)

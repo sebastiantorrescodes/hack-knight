@@ -15,6 +15,10 @@ PHOTO_DIR = Path(os.getenv("PHOTO_DIR", BASE_DIR / "data" / "photos"))
 # Comma-separated origins allowed to call the API from a browser (the frontend). "*" allows any.
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
 
+# Clerk sign-in for the dashboard: the same publishable key as VITE_CLERK_PUBLISHABLE_KEY in frontend/.env.
+# Users and plant ownership are stored in Tiger Data, so TIGER_DATABASE_URL is needed too.
+CLERK_PUBLISHABLE_KEY = os.getenv("CLERK_PUBLISHABLE_KEY", "")
+
 # AI agent (Gemini)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")

@@ -3,9 +3,9 @@
 Run:  uvicorn main:app --host 0.0.0.0 --port 8000
 Docs: http://localhost:8000/docs
 
-Writes (anything the Pi sends, and creating commands) need the X-API-Key header.
-Reads are open so a frontend page can fetch them without a key.
-/agent/chat is also open so the dashboard can use it; the agent's watering limits live in agent.py.
+Writes from the Pi (and creating commands by hand) need the X-API-Key header.
+Dashboard reads and /agent/chat need a Clerk sign-in (see auth.py), and only work for plants the signed-in
+user has claimed (POST /plants). The agent's watering limits live in agent.py.
 """
 import asyncio
 import logging
@@ -18,11 +18,14 @@ from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+import httpx
 from pydantic import BaseModel, Field
 
+import accounts
 import agent
+import auth
 import db
 import settings
 import stream
@@ -92,11 +95,40 @@ app.add_middleware(CORSMiddleware, allow_origins=settings.CORS_ORIGINS, allow_me
 app.mount("/photo-files", StaticFiles(directory=settings.PHOTO_DIR), name="photo-files")
 
 
+@app.exception_handler(accounts.NotConfigured)
+def accounts_not_configured(request, exc):
+    return JSONResponse({"detail": str(exc)}, status_code=503)
+
+
 def require_key(x_api_key: str = Header(default="")):
     if not settings.API_KEY:
         raise HTTPException(500, "API_KEY is not set on the server (backend/.env)")
     if not secrets.compare_digest(x_api_key.encode(), settings.API_KEY.encode()):
         raise HTTPException(401, "Invalid API key")
+
+
+def owned_plant(plant_id: str = Query(pattern=PLANT_ID), user_id: str = Depends(auth.current_user)):
+    """The plant in ?plant_id=, if the signed-in user owns it. Someone else's plant looks the same as a missing one."""
+    return check_owner(plant_id, user_id)
+
+
+def pi_or_owner(
+    plant_id: str = Query(pattern=PLANT_ID),
+    x_api_key: str = Header(default=""),
+    authorization: str = Header(default=""),
+    token: str = Query(default=""),
+):
+    """For reads both sides use: the Pi with its API key (e.g. polling pending commands), or the plant's owner."""
+    if x_api_key:
+        return require_key(x_api_key)
+    return check_owner(plant_id, auth.current_user(authorization, token))
+
+
+def check_owner(plant_id, user_id):
+    plant = accounts.get_plant(plant_id)
+    if plant is None or plant["owner_id"] != user_id:
+        raise HTTPException(404, "Plant not found")
+    return plant
 
 
 def to_utc(ts: datetime) -> str:
@@ -148,6 +180,28 @@ class ChatIn(BaseModel):
     history: list[ChatTurn] = Field(default_factory=list, max_length=40, description="Earlier turns, oldest first")
 
 
+class Profile(BaseModel):
+    """Answers from the intake form."""
+    role: Literal["parent", "teacher", "hobbyist"]
+    kids_ages: Literal["under-6", "6-8", "9-12", "13+", "none"]
+    experience: Literal["new", "some", "expert"]
+    goals: list[Literal["learn", "save-water", "away", "science"]] = Field(default_factory=list, max_length=4)
+
+
+class PlantFields(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=20)
+    species: Optional[str] = Field(None, max_length=60)
+    indoors: Optional[bool] = None
+    location_name: Optional[str] = Field(None, max_length=120)
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lon: Optional[float] = Field(None, ge=-180, le=180)
+
+
+class PlantClaim(PlantFields):
+    id: str = Field(pattern=PLANT_ID, description="The device id the Pi uploads with (PLANT_ID in pi/.env)")
+    name: str = Field(min_length=1, max_length=20)
+
+
 # Routes
 
 @app.get("/health")
@@ -170,7 +224,7 @@ def add_readings(batch: ReadingBatch):
     return {"accepted_ids": [r.id for r in batch.readings], "inserted": inserted}
 
 
-@app.get("/readings")
+@app.get("/readings", dependencies=[Depends(owned_plant)])
 def get_readings(
     plant_id: str = Query(pattern=PLANT_ID),
     limit: int = Query(200, ge=1, le=5000),
@@ -182,7 +236,7 @@ def get_readings(
 HISTORY_BUCKETS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
 
 
-@app.get("/readings/history")
+@app.get("/readings/history", dependencies=[Depends(owned_plant)])
 def get_reading_history(
     plant_id: str = Query(pattern=PLANT_ID),
     hours: int = Query(24, ge=1, le=24 * 30),
@@ -221,7 +275,7 @@ async def add_photo(
     return with_url(db.insert_photo(plant_id, ts_str, rel_path, green_pct, brightness))
 
 
-@app.get("/photos")
+@app.get("/photos", dependencies=[Depends(owned_plant)])
 def get_photos(plant_id: str = Query(pattern=PLANT_ID), limit: int = Query(20, ge=1, le=500)):
     return [with_url(p) for p in db.list_photos(plant_id, limit)]
 
@@ -233,7 +287,7 @@ def create_command(cmd: CommandIn):
     return created
 
 
-@app.get("/commands")
+@app.get("/commands", dependencies=[Depends(pi_or_owner)])
 def get_commands(
     plant_id: str = Query(pattern=PLANT_ID),
     status: Optional[Literal["pending", "done", "failed"]] = None,
@@ -256,7 +310,7 @@ def finish_command(command_id: int, result: CommandResult):
     return db.finish_command(command_id, result.success, result.message)
 
 
-@app.get("/status")
+@app.get("/status", dependencies=[Depends(owned_plant)])
 def get_status(plant_id: str = Query(pattern=PLANT_ID)):
     summary = db.status(plant_id)
     summary["latest_photo"] = with_url(summary["latest_photo"])
@@ -280,7 +334,7 @@ async def add_frame(request: Request, plant_id: str = Query(pattern=PLANT_ID)):
     return {"viewers": ch.viewers}
 
 
-@app.get("/stream")
+@app.get("/stream", dependencies=[Depends(owned_plant)])
 def live_stream(plant_id: str = Query(pattern=PLANT_ID)):
     """Live video for an <img src="/stream?plant_id=..."> tag."""
     return StreamingResponse(
@@ -290,7 +344,7 @@ def live_stream(plant_id: str = Query(pattern=PLANT_ID)):
     )
 
 
-@app.get("/stream/snapshot")
+@app.get("/stream/snapshot", dependencies=[Depends(owned_plant)])
 def stream_snapshot(plant_id: str = Query(pattern=PLANT_ID)):
     frame = stream.channel(plant_id).frame
     if frame is None:
@@ -298,14 +352,14 @@ def stream_snapshot(plant_id: str = Query(pattern=PLANT_ID)):
     return Response(frame, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
-@app.get("/stream/status")
+@app.get("/stream/status", dependencies=[Depends(owned_plant)])
 def stream_status(plant_id: str = Query(pattern=PLANT_ID)):
     return stream.channel(plant_id).status()
 
 
 # Plant voice
 
-@app.get("/tts")
+@app.get("/tts", dependencies=[Depends(auth.current_user)])
 async def text_to_speech(text: str = Query(min_length=1)):
     """MP3 of the plant saying `text`. A GET so the frontend can use it directly: new Audio("/tts?text=...")."""
     text = " ".join(text.split())
@@ -333,8 +387,9 @@ def run_agent(fn, *args, **kwargs):
 
 
 @app.post("/agent/chat")
-def agent_chat(chat: ChatIn):
+def agent_chat(chat: ChatIn, user_id: str = Depends(auth.current_user)):
     """Ask the agent something. Returns {reply, actions, ...}; send earlier turns in `history` to keep context."""
+    check_owner(chat.plant_id, user_id)
     history = [turn.model_dump() for turn in chat.history]
     return run_agent(agent.run, chat.plant_id, chat.message, trigger="chat", history=history)
 
@@ -345,15 +400,70 @@ def agent_check(plant_id: str = Query(pattern=PLANT_ID)):
     return run_agent(agent.check, plant_id)
 
 
-@app.get("/agent/runs")
+@app.get("/agent/runs", dependencies=[Depends(owned_plant)])
 def get_agent_runs(plant_id: str = Query(pattern=PLANT_ID), limit: int = Query(20, ge=1, le=200)):
     return db.list_agent_runs(plant_id, limit)
 
 
-@app.get("/agent/events")
+@app.get("/agent/events", dependencies=[Depends(owned_plant)])
 def get_agent_events(
     plant_id: str = Query(pattern=PLANT_ID),
     kind: Optional[Literal["alert", "skipped_watering"]] = None,
     limit: int = Query(50, ge=1, le=500),
 ):
     return db.list_events(plant_id, kind, limit)
+
+
+# People and their plants
+
+@app.get("/me")
+def get_me(user_id: str = Depends(auth.current_user)):
+    """The signed-in user's intake answers (onboarded_at is null until the form is done) and their plants."""
+    return {"user": accounts.ensure_user(user_id), "plants": accounts.list_plants(user_id)}
+
+
+@app.put("/me/profile")
+def put_profile(profile: Profile, user_id: str = Depends(auth.current_user)):
+    return accounts.save_profile(user_id, profile.model_dump())
+
+
+@app.post("/plants")
+def claim_plant(plant: PlantClaim, user_id: str = Depends(auth.current_user)):
+    """Tie a Pi's plant id to the signed-in user. First come, first served."""
+    existing = accounts.get_plant(plant.id)
+    if existing and existing["owner_id"] == user_id:
+        return accounts.update_plant(plant.id, plant.model_dump(exclude={"id"}, exclude_unset=True))
+    try:
+        created = accounts.claim_plant(user_id, plant.id, plant.model_dump(exclude={"id"}))
+    except accounts.AlreadyClaimed:
+        raise HTTPException(409, f"Plant id {plant.id!r} already belongs to someone else")
+    log.info("plant   %s: claimed by %s", plant.id, user_id)
+    return created
+
+
+@app.patch("/plants/{plant_id}")
+def patch_plant(plant_id: str, fields: PlantFields, user_id: str = Depends(auth.current_user)):
+    check_owner(plant_id, user_id)
+    return accounts.update_plant(plant_id, fields.model_dump(exclude_unset=True))
+
+
+@app.get("/geocode", dependencies=[Depends(auth.current_user)])
+def geocode(q: str = Query(min_length=2, max_length=100)):
+    """Town or city name -> up to 5 matches with coordinates, for the plant's weather location."""
+    try:
+        resp = httpx.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": q, "count": 5, "language": "en", "format": "json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Location search failed: {e}")
+    return [
+        {
+            "name": ", ".join(p for p in (r.get("name"), r.get("admin1"), r.get("country")) if p),
+            "lat": r["latitude"],
+            "lon": r["longitude"],
+        }
+        for r in resp.json().get("results", [])
+    ]

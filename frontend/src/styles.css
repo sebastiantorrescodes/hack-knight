@@ -1,82 +1,210 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Dark mode follows the device setting, like iOS */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+/* iOS system palette mapped onto shadcn's tokens */
 :root {
-  --bg: #fff8e7;
-  --card: #ffffff;
-  --ink: #3b2a20;
-  --muted: #7a6a5d;
-  --green: #4caf50;
-  --green-dark: #2e7d32;
-  --sky: #e3f2fd;
-  --shadow: 0 6px 0 rgba(59, 42, 32, 0.12);
-  --radius: 28px;
-  font-family: "Fredoka", system-ui, sans-serif;
-  color: var(--ink);
+  --radius: 1.25rem;
+
+  --background: #f2f2f7;
+  --foreground: #1c1c1e;
+  --card: rgb(255 255 255 / 0.6);
+  --card-foreground: #1c1c1e;
+  --popover: rgb(255 255 255 / 0.85);
+  --popover-foreground: #1c1c1e;
+  --primary: #34c759;
+  --primary-foreground: #ffffff;
+  --secondary: rgb(120 120 128 / 0.12);
+  --secondary-foreground: #1c1c1e;
+  --muted: rgb(120 120 128 / 0.12);
+  --muted-foreground: rgb(60 60 67 / 0.6);
+  --accent: rgb(120 120 128 / 0.16);
+  --accent-foreground: #1c1c1e;
+  --destructive: #ff3b30;
+  --border: rgb(60 60 67 / 0.12);
+  --input: rgb(120 120 128 / 0.12);
+  --ring: #007aff;
+
+  --ios-blue: #007aff;
+  --ios-green: #34c759;
+  --ios-orange: #ff9500;
+  --ios-red: #ff3b30;
+  --ios-teal: #30b0c7;
+  --ios-indigo: #5856d6;
+
+  /* Glass surfaces */
+  --glass-bg: rgb(255 255 255 / 0.55);
+  --glass-bg-strong: rgb(255 255 255 / 0.78);
+  --glass-border: rgb(255 255 255 / 0.7);
+  --glass-highlight: rgb(255 255 255 / 0.9);
+  --glass-shadow: 0 10px 40px -12px rgb(31 50 81 / 0.18), 0 2px 6px -2px rgb(31 50 81 / 0.06);
+
+  /* Chart tokens */
+  --chart-soil: #007aff;
+  --chart-light: #ff9500;
+  --chart-leaf: #34c759;
+  --chart-grid: rgb(60 60 67 / 0.1);
+  --chart-axis: rgb(60 60 67 / 0.25);
+  --chart-muted: rgb(60 60 67 / 0.55);
+  --chart-surface: #ffffff;
+
+  /* Background blobs */
+  --blob-1: #b8f0c8;
+  --blob-2: #bfe3ff;
+  --blob-3: #ffe2c2;
+  --blob-4: #e3d9ff;
 }
 
-* { box-sizing: border-box; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #000000;
+    --foreground: #f2f2f7;
+    --card: rgb(44 44 46 / 0.55);
+    --card-foreground: #f2f2f7;
+    --popover: rgb(44 44 46 / 0.9);
+    --popover-foreground: #f2f2f7;
+    --primary: #30d158;
+    --primary-foreground: #ffffff;
+    --secondary: rgb(118 118 128 / 0.24);
+    --secondary-foreground: #f2f2f7;
+    --muted: rgb(118 118 128 / 0.24);
+    --muted-foreground: rgb(235 235 245 / 0.6);
+    --accent: rgb(118 118 128 / 0.32);
+    --accent-foreground: #f2f2f7;
+    --destructive: #ff453a;
+    --border: rgb(255 255 255 / 0.1);
+    --input: rgb(118 118 128 / 0.24);
+    --ring: #0a84ff;
 
-body {
-  margin: 0;
-  background: var(--bg) radial-gradient(circle at 20% 0%, #fff3c4 0, transparent 40%);
-  min-height: 100vh;
+    --ios-blue: #0a84ff;
+    --ios-green: #30d158;
+    --ios-orange: #ff9f0a;
+    --ios-red: #ff453a;
+    --ios-teal: #40c8e0;
+    --ios-indigo: #5e5ce6;
+
+    --glass-bg: rgb(30 30 32 / 0.5);
+    --glass-bg-strong: rgb(44 44 46 / 0.78);
+    --glass-border: rgb(255 255 255 / 0.1);
+    --glass-highlight: rgb(255 255 255 / 0.08);
+    --glass-shadow: 0 10px 40px -12px rgb(0 0 0 / 0.6);
+
+    --chart-soil: #0a84ff;
+    --chart-light: #ff9f0a;
+    --chart-leaf: #30d158;
+    --chart-grid: rgb(235 235 245 / 0.1);
+    --chart-axis: rgb(235 235 245 / 0.25);
+    --chart-muted: rgb(235 235 245 / 0.55);
+    --chart-surface: #1c1c1e;
+
+    --blob-1: #0f5132;
+    --blob-2: #0b3b66;
+    --blob-3: #5a3410;
+    --blob-4: #33206b;
+  }
 }
 
-button { font: inherit; color: inherit; cursor: pointer; }
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI Variable Text", system-ui, sans-serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", "Nunito", -apple-system, system-ui, sans-serif;
 
-.app {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 20px 16px 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 6px);
+  --radius-lg: calc(var(--radius) - 4px);
+  --radius-xl: var(--radius);
+  --radius-2xl: calc(var(--radius) + 4px);
+  --radius-3xl: calc(var(--radius) + 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-ios-blue: var(--ios-blue);
+  --color-ios-green: var(--ios-green);
+  --color-ios-orange: var(--ios-orange);
+  --color-ios-red: var(--ios-red);
+  --color-ios-teal: var(--ios-teal);
+  --color-ios-indigo: var(--ios-indigo);
 }
 
-.card {
-  background: var(--card);
-  border: 3px solid var(--ink);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+/* Frosted glass panel: translucent fill, background blur, hairline light edge */
+@utility glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
 }
 
-/* Header */
-.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-.top h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.8rem); font-weight: 700; display: flex; align-items: center; gap: 8px; }
-.edit { background: none; border: none; font-size: 1.4rem; padding: 4px; }
-.rename { display: flex; gap: 8px; }
-.rename input { font: inherit; font-size: 1.6rem; padding: 6px 14px; border: 3px solid var(--ink); border-radius: 16px; width: 12ch; }
-.rename button { padding: 6px 16px; border: 3px solid var(--ink); border-radius: 16px; background: var(--green); color: #fff; font-weight: 600; }
-.saved-pill { background: var(--sky); border: 3px solid var(--ink); border-radius: 999px; padding: 8px 18px; font-size: 1.1rem; }
-
-/* Plant + cam */
-.stage { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-@media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
-
-.plant { display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 8px; }
-.bubble {
-  position: relative;
-  background: #fffde7;
-  border: 3px solid var(--ink);
-  border-radius: 22px;
-  padding: 14px 20px;
-  font-size: 1.35rem;
-  line-height: 1.35;
-  text-align: center;
-  min-height: 3.2em;
-  max-width: 420px;
+@utility glass-strong {
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
 }
-.bubble::after {
-  content: "";
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background text-foreground font-sans min-h-screen;
+  }
+  button {
+    cursor: pointer;
+  }
+}
+
+/* Soft, slowly drifting colour blobs behind the glass */
+.mesh {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.mesh span {
   position: absolute;
-  bottom: -14px;
-  left: 50%;
-  margin-left: -12px;
-  border: 12px solid transparent;
-  border-top-color: var(--ink);
-  border-bottom: 0;
+  width: 55vmax;
+  height: 55vmax;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.75;
+  animation: drift 26s ease-in-out infinite alternate;
 }
-.plant-face { width: min(320px, 80%); height: auto; }
+.mesh span:nth-child(1) { background: var(--blob-1); top: -18vmax; left: -12vmax; }
+.mesh span:nth-child(2) { background: var(--blob-2); top: -10vmax; right: -18vmax; animation-delay: -6s; }
+.mesh span:nth-child(3) { background: var(--blob-3); bottom: -22vmax; left: 15vmax; animation-delay: -12s; }
+.mesh span:nth-child(4) { background: var(--blob-4); bottom: -20vmax; right: -10vmax; animation-delay: -18s; }
+@keyframes drift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(6vmax, 4vmax) scale(1.12); }
+}
 
-/* Mood animations */
+/* Plant character mood animations */
+.plant-face { transform-origin: 50% 100%; transform-box: fill-box; }
 .mood-happy { animation: bounce 1.4s ease-in-out infinite; }
 .mood-okay { animation: sway 4s ease-in-out infinite; }
 .mood-sleepy { animation: breathe 4s ease-in-out infinite; }
@@ -86,144 +214,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .mood-soggy .sweat { animation: drip 1.6s ease-in infinite; }
 .zzz { animation: float 2.5s ease-in-out infinite; }
 .leaves g { transition: transform 0.8s ease; }
+.water { transition: y 1s ease, height 1s ease; }
 
 @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
 @keyframes sway { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
 @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
 @keyframes drip { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(30px); opacity: 0; } }
 @keyframes float { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(-8px); opacity: 0.6; } }
-.plant-face { transform-origin: 50% 100%; transform-box: fill-box; }
 
-/* Cam */
-.cam { padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #37474f; color: #fff; }
-.cam-header { display: flex; justify-content: space-between; align-items: center; font-size: 1.3rem; font-weight: 600; }
-.live-dot { background: #e53935; border-radius: 8px; padding: 2px 10px; font-size: 0.9rem; letter-spacing: 0.05em; animation: pulse 1.6s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: 0.55; } }
-.cam-screen { flex: 1; min-height: 240px; border-radius: 18px; overflow: hidden; background: #263238; display: flex; align-items: center; justify-content: center; }
-.cam-screen img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cam-off { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 1.2rem; color: #cfd8dc; }
-.cam-off-emoji { font-size: 3rem; }
-
-/* Meters */
-.meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-@media (max-width: 760px) { .meters { grid-template-columns: 1fr; } }
-.meter { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px; transition: transform 0.15s; }
-.meter:hover { transform: translateY(-3px); }
-.meter:active { transform: translateY(2px); box-shadow: none; }
-.meter-title { font-size: 1.4rem; font-weight: 600; }
-.meter-art { width: 110px; height: 120px; }
-.meter-label { font-size: 1.3rem; font-weight: 700; color: var(--green-dark); }
-.meter-hint { font-size: 0.95rem; color: var(--muted); }
-.water { transition: y 1s ease, height 1s ease; }
-.leaf-row { display: flex; align-items: center; justify-content: center; gap: 2px; font-size: 1.6rem; width: auto; }
-.leaf { opacity: 0.2; filter: grayscale(1); }
-.leaf.on { opacity: 1; filter: none; }
-
-/* Tabs */
-.tabs { display: flex; gap: 8px; }
-.tabs a {
-  text-decoration: none;
-  color: var(--ink);
-  font-size: 1.15rem;
-  font-weight: 600;
-  padding: 8px 18px;
-  border: 3px solid var(--ink);
-  border-radius: 999px;
-  background: var(--card);
-}
-.tabs a.active { background: var(--green); color: #fff; }
-
-/* Analytics: a calmer, data-first look. Numbers and labels in the system sans, color only on marks. */
-.analytics {
-  --a-surface: #ffffff;
-  --a-ink: #0b0b0b;
-  --a-ink-2: #52514e;
-  --a-muted: #898781;
-  --a-hairline: #e1e0d9;
-  --a-border: rgba(11, 11, 11, 0.1);
-  --a-good: #006300;
-  --a-warn-bg: #fff4e0;
-  --a-warn-ink: #8a4b00;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: var(--a-ink);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.a-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.a-filters button {
-  font: inherit;
-  font-size: 0.95rem;
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--a-border);
-  background: var(--a-surface);
-  color: var(--a-ink-2);
-}
-.a-filters button.active { border-color: var(--a-ink); color: var(--a-ink); font-weight: 600; }
-.a-source { margin-left: auto; font-size: 0.9rem; color: var(--a-ink-2); }
-
-.a-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-.a-tile, .a-card {
-  background: var(--a-surface);
-  border: 1px solid var(--a-border);
-  border-radius: 14px;
-}
-.a-tile { padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
-.a-tile-label { font-size: 0.85rem; color: var(--a-ink-2); }
-.a-tile-value { font-size: 1.75rem; font-weight: 600; line-height: 1.2; }
-.a-tile-detail { font-size: 0.85rem; color: var(--a-muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.a-badge { font-weight: 600; border-radius: 6px; padding: 1px 6px; }
-.a-badge.good { color: var(--a-good); background: #e7f5e7; }
-.a-badge.warn { color: var(--a-warn-ink); background: var(--a-warn-bg); }
-
-.a-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 860px) { .a-grid { grid-template-columns: minmax(0, 1fr); } }
-.a-card { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; transition: opacity 0.2s; }
-.a-card.dimmed { opacity: 0.6; }
-.a-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.a-card h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
-.a-sub { margin: 2px 0 0; font-size: 0.85rem; color: var(--a-muted); }
-.a-toggle {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 4px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--a-border);
-  background: var(--a-surface);
-  color: var(--a-ink-2);
-  white-space: nowrap;
-}
-.a-empty { min-height: 200px; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--a-muted); }
-
-.a-table-wrap { max-height: 260px; overflow: auto; }
-.a-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
-.a-table th { position: sticky; top: 0; background: var(--a-surface); text-align: left; color: var(--a-ink-2); font-weight: 600; }
-.a-table th, .a-table td { padding: 6px 8px; border-bottom: 1px solid var(--a-hairline); }
-
-.a-tip {
-  background: var(--a-surface);
-  border: 1px solid var(--a-border);
-  border-radius: 10px;
-  padding: 8px 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 0.85rem;
-  min-width: 150px;
-}
-.a-tip-time { color: var(--a-ink-2); margin-bottom: 4px; }
-.a-tip-row { display: flex; align-items: center; gap: 6px; }
-.a-tip-name { color: var(--a-ink-2); }
-.a-tip-value { margin-left: auto; font-weight: 600; color: var(--a-ink); font-variant-numeric: tabular-nums; }
-.a-swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-
-.a-feed { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow: auto; }
-.a-feed li { padding: 10px 0; border-bottom: 1px solid var(--a-hairline); }
-.a-feed li:last-child { border-bottom: none; }
-.a-feed p { margin: 4px 0 0; font-size: 0.92rem; line-height: 1.4; }
-.a-feed-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.85rem; }
-.a-kind { font-weight: 600; }
-.a-feed time { color: var(--a-muted); }
+.typing-dot { animation: blink 1.2s infinite ease-in-out; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

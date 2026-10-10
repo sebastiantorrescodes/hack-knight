@@ -4,7 +4,7 @@
                      If the backend is unreachable the data stays in the local DB and goes next time.
     commands         every COMMAND_POLL_INTERVAL, pending commands are fetched and run:
                        photo  asks camera.py for a photo now (camera.py owns the webcam)
-                       water  reported as failed until WATERING_ENABLED=1 and the servo code exists
+                       water  asks reader.py (which owns the serial port) to send WATER to the Arduino
 """
 import logging
 import time
@@ -80,11 +80,22 @@ def take_photo_now():
     return False, "camera.py didn't take the photo; is it running?"
 
 
+WATER_WAIT_SECONDS = 15
+
+
 def water(payload):
+    """Ask reader.py to send WATER to the Arduino and wait until it has. Returns (success, message)."""
     if not config.WATERING_ENABLED:
-        return False, "Watering hardware isn't connected yet"
-    # Servo control goes here once it's wired up
-    return False, "Watering is enabled but not implemented yet"
+        return False, "Watering is turned off on the Pi (WATERING_ENABLED=0)"
+    config.WATER_REQUEST_FILE.touch()
+    deadline = time.monotonic() + WATER_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        if not config.WATER_REQUEST_FILE.exists():
+            # The Arduino pours a fixed amount per WATER command; payload["seconds"] isn't used yet
+            return True, "Poured water"
+        time.sleep(0.5)
+    config.WATER_REQUEST_FILE.unlink(missing_ok=True)  # don't pour later by surprise
+    return False, "reader.py didn't pick up the request; is it running and connected to the Arduino?"
 
 
 def run_commands(api):
