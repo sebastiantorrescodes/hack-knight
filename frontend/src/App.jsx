@@ -6,6 +6,7 @@ import { PlantProvider } from "./PlantContext";
 import Dashboard from "./Dashboard";
 import Onboarding from "./auth/Onboarding";
 import SignInScreen from "./auth/SignInScreen";
+import Landing from "./Landing";
 import { CenteredScreen } from "./components/Mesh";
 import { Button } from "@/components/ui/button";
 
@@ -97,6 +98,21 @@ function Home() {
   );
 }
 
+// Clerk's hash routing (#/factor-one, #/verify...) means a sign-in is under way, so skip the landing page
+const signInInProgress = () => window.location.hash.startsWith("#/");
+
+/** Signed out: the landing page, until they choose to sign in. */
+function Welcome() {
+  const [signingIn, setSigningIn] = useState(signInInProgress);
+
+  const start = () => {
+    window.scrollTo(0, 0);
+    setSigningIn(true);
+  };
+
+  return signingIn ? <SignInScreen onBack={() => setSigningIn(false)} /> : <Landing onStart={start} />;
+}
+
 export default function App() {
   return (
     <>
@@ -104,7 +120,7 @@ export default function App() {
         <Spinner />
       </ClerkLoading>
       <Show when="signed-out">
-        <SignInScreen />
+        <Welcome />
       </Show>
       <Show when="signed-in">
         <Home />

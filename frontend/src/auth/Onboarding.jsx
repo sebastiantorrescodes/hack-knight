@@ -335,7 +335,7 @@ export default function Onboarding({ user, onDone, onCancel }) {
             )}
           </div>
           <h1 className="font-rounded text-3xl font-extrabold tracking-tight">
-            {step === 1 ? "Welcome to Smart Garden 🌱" : onboarded ? "Add a plant" : "Now, your plant"}
+            {step === 1 ? "Welcome to Smarty Plants 🌱" : onboarded ? "Add a plant" : "Now, your plant"}
           </h1>
           <p className="text-[15px] text-muted-foreground">
             {step === 1
