@@ -5,8 +5,13 @@ import { explain, getMood } from "./plant";
 import PlantFace from "./components/PlantFace";
 import Meters from "./components/Meters";
 import PlantCam from "./components/PlantCam";
+import Analytics from "./analytics/Analytics";
 
 const EXPLAIN_MS = 12000;
+const TABS = [
+  { key: "plant", label: "🌱 Plant" },
+  { key: "data", label: "📊 Garden data" },
+];
 
 function loadName() {
   try {
@@ -24,19 +29,43 @@ function saveName(name) {
   }
 }
 
-export default function App() {
-  const { data: status, error } = usePoll(getStatus, 5000);
+const tabFromHash = () => (window.location.hash === "#data" ? "data" : "plant");
+
+function PlantView({ name, status, error }) {
   const mood = getMood(status, error);
-  const [name, setName] = useState(loadName);
-  const [editing, setEditing] = useState(false);
   const [explanation, setExplanation] = useState(null);
-  const [grownUps, setGrownUps] = useState(false);
 
   useEffect(() => {
     if (!explanation) return;
     const id = setTimeout(() => setExplanation(null), EXPLAIN_MS);
     return () => clearTimeout(id);
   }, [explanation]);
+
+  return (
+    <>
+      <main className="stage">
+        <section className="card plant">
+          <div className="bubble" aria-live="polite">{explanation || mood.line}</div>
+          <PlantFace mood={mood.key} />
+        </section>
+        <PlantCam name={name} />
+      </main>
+      <Meters status={status} onExplain={(m) => setExplanation(explain(m, status))} />
+    </>
+  );
+}
+
+export default function App() {
+  const { data: status, error } = usePoll(getStatus, 5000);
+  const [name, setName] = useState(loadName);
+  const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState(tabFromHash);
+
+  useEffect(() => {
+    const onHash = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const rename = (e) => {
     e.preventDefault();
@@ -47,7 +76,6 @@ export default function App() {
   };
 
   const saved = status?.skipped_waterings ?? 0;
-  const r = status?.latest_reading;
 
   return (
     <div className="app">
@@ -68,30 +96,15 @@ export default function App() {
         </div>
       </header>
 
-      <main className="stage">
-        <section className="card plant">
-          <div className="bubble" aria-live="polite">{explanation || mood.line}</div>
-          <PlantFace mood={mood.key} />
-        </section>
-        <PlantCam name={name} />
-      </main>
+      <nav className="tabs">
+        {TABS.map((t) => (
+          <a key={t.key} href={`#${t.key}`} className={tab === t.key ? "active" : ""} aria-current={tab === t.key ? "page" : undefined}>
+            {t.label}
+          </a>
+        ))}
+      </nav>
 
-      <Meters status={status} onExplain={(m) => setExplanation(explain(m, status))} />
-
-      <footer className="grown-ups">
-        <button className="link" onClick={() => setGrownUps((g) => !g)}>
-          {grownUps ? "Hide" : "Show"} grown-up details
-        </button>
-        {grownUps && (
-          <dl className="details">
-            <dt>Soil (0-1023)</dt><dd>{r ? `${r.soil} (${r.status})` : "no data"}</dd>
-            <dt>Light (0-1023)</dt><dd>{r ? `${r.light} (${r.light_status})` : "no data"}</dd>
-            <dt>Last reading</dt><dd>{r ? new Date(r.ts).toLocaleString() : "never"}</dd>
-            <dt>Pending commands</dt><dd>{status?.pending_commands ?? "?"}</dd>
-            <dt>Backend</dt><dd>{error ? `unreachable (${error.message})` : "connected"}</dd>
-          </dl>
-        )}
-      </footer>
+      {tab === "data" ? <Analytics /> : <PlantView name={name} status={status} error={error} />}
     </div>
   );
 }

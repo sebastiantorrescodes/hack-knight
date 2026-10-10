@@ -13,7 +13,7 @@ import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
@@ -152,7 +152,7 @@ class ChatIn(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "readings_store": db.readings_store()}
 
 
 @app.post("/readings", dependencies=[Depends(require_key)])
@@ -177,6 +177,20 @@ def get_readings(
     since: Optional[datetime] = None,
 ):
     return db.list_readings(plant_id, limit, to_utc(since) if since else None)
+
+
+HISTORY_BUCKETS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
+
+
+@app.get("/readings/history")
+def get_reading_history(
+    plant_id: str = Query(pattern=PLANT_ID),
+    hours: int = Query(24, ge=1, le=24 * 30),
+    bucket: Literal["1m", "5m", "15m", "1h", "1d"] = "1h",
+):
+    """Average/min/max soil and average light per time bucket, oldest first. Made for charts."""
+    since = to_utc(datetime.now(timezone.utc) - timedelta(hours=hours))
+    return db.reading_history(plant_id, HISTORY_BUCKETS[bucket], since)
 
 
 @app.post("/photos", dependencies=[Depends(require_key)])

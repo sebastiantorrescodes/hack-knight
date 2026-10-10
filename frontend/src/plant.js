@@ -1,6 +1,8 @@
 // Kid-friendly meaning of the sensor values. Thresholds match plant_monitor.ino.
 export const DRY_LIMIT = 150;
 export const WET_LIMIT = 450;
+export const DARK_LIMIT = 200;
+export const BRIGHT_LIMIT = 600;
 export const SOIL_FULL = 600; // drenched soil reads about 450-600
 export const LIGHT_FULL = 760; // the light sensor tops out around here
 export const LEAFY_FULL = 40; // green_pct when the plant fills much of the photo

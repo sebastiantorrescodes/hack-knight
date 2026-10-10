@@ -1,4 +1,7 @@
-"""Server-side SQLite storage for readings, photos and commands."""
+"""Server-side SQLite storage for readings, photos and commands.
+
+Readings go to Tiger Data instead when TIGER_DATABASE_URL is set (see tsdb.py).
+"""
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -87,16 +90,29 @@ def init():
     with connect() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(SCHEMA)
+    if USE_TIGER:
+        tsdb.init()
 
 
 def _one(row):
     return dict(row) if row else None
 
 
-# Readings
+# Readings: stored in Tiger Data when TIGER_DATABASE_URL is set, otherwise in the SQLite table above
+
+USE_TIGER = bool(settings.TIGER_DATABASE_URL)
+if USE_TIGER:
+    import tsdb
+
+
+def readings_store():
+    return "tigerdata" if USE_TIGER else "sqlite"
+
 
 def insert_readings(plant_id, readings):
     """Insert readings, skipping any already stored (same plant + timestamp). Returns count inserted."""
+    if USE_TIGER:
+        return tsdb.insert_readings(plant_id, readings)
     received = now()
     with connect() as conn:
         before = conn.total_changes
@@ -110,6 +126,8 @@ def insert_readings(plant_id, readings):
 
 def list_readings(plant_id, limit, since=None):
     """Newest `limit` readings, returned oldest-first so they can go straight into a chart."""
+    if USE_TIGER:
+        return tsdb.list_readings(plant_id, limit, since)
     query = "SELECT * FROM readings WHERE plant_id = ?"
     params = [plant_id]
     if since:
@@ -119,6 +137,43 @@ def list_readings(plant_id, limit, since=None):
     params.append(limit)
     with connect() as conn:
         return [dict(r) for r in conn.execute(query, params)]
+
+
+def latest_reading(plant_id):
+    if USE_TIGER:
+        return tsdb.latest_reading(plant_id)
+    with connect() as conn:
+        return _one(conn.execute(
+            "SELECT * FROM readings WHERE plant_id = ? ORDER BY ts DESC LIMIT 1", (plant_id,)
+        ).fetchone())
+
+
+def reading_history(plant_id, bucket_seconds, since):
+    """Averages per time bucket since `since` (ISO string), oldest first. Tiger Data does this with time_bucket()."""
+    if USE_TIGER:
+        return tsdb.history(plant_id, bucket_seconds, since)
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT CAST(strftime('%s', ts) AS INTEGER) / :b * :b AS bucket,
+                      AVG(soil) AS soil_avg, MIN(soil) AS soil_min, MAX(soil) AS soil_max,
+                      AVG(light) AS light_avg, COUNT(*) AS count
+               FROM readings
+               WHERE plant_id = :p AND ts >= :since
+               GROUP BY bucket
+               ORDER BY bucket""",
+            {"b": bucket_seconds, "p": plant_id, "since": since},
+        ).fetchall()
+    return [
+        {
+            "ts": datetime.fromtimestamp(r["bucket"], timezone.utc).isoformat(timespec="seconds"),
+            "soil_avg": round(r["soil_avg"], 1),
+            "soil_min": r["soil_min"],
+            "soil_max": r["soil_max"],
+            "light_avg": round(r["light_avg"], 1),
+            "count": r["count"],
+        }
+        for r in rows
+    ]
 
 
 # Photos
@@ -260,22 +315,17 @@ def count_events(plant_id, kind):
 # Dashboard summary
 
 def status(plant_id):
+    reading = latest_reading(plant_id)
     with connect() as conn:
-        reading = _one(conn.execute(
-            "SELECT * FROM readings WHERE plant_id = ? ORDER BY ts DESC LIMIT 1", (plant_id,)
-        ).fetchone())
         photo = _one(conn.execute(
             "SELECT * FROM photos WHERE plant_id = ? ORDER BY ts DESC LIMIT 1", (plant_id,)
         ).fetchone())
         pending = conn.execute(
             "SELECT COUNT(*) FROM commands WHERE plant_id = ? AND status = 'pending'", (plant_id,)
         ).fetchone()[0]
-        last_seen = conn.execute(
-            """SELECT MAX(received_at) FROM (
-                   SELECT received_at FROM readings WHERE plant_id = ?
-                   UNION ALL SELECT received_at FROM photos WHERE plant_id = ?)""",
-            (plant_id, plant_id),
-        ).fetchone()[0]
+    # Readings arrive in order, so the newest reading's received_at is the newest for that table
+    seen = [r["received_at"] for r in (reading, photo) if r]
+    last_seen = max(seen) if seen else None
     return {
         "plant_id": plant_id,
         "latest_reading": reading,

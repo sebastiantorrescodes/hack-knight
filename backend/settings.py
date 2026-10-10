@@ -9,6 +9,8 @@ load_dotenv(BASE_DIR / ".env")
 
 API_KEY = os.getenv("API_KEY", "")
 DB_PATH = Path(os.getenv("DB_PATH", BASE_DIR / "data" / "server.db"))
+# Tiger Data (Postgres + TimescaleDB) service URL. When set, sensor readings are stored there instead of DB_PATH.
+TIGER_DATABASE_URL = os.getenv("TIGER_DATABASE_URL", "")
 PHOTO_DIR = Path(os.getenv("PHOTO_DIR", BASE_DIR / "data" / "photos"))
 # Comma-separated origins allowed to call the API from a browser (the frontend). "*" allows any.
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
