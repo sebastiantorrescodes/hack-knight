@@ -10,8 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Photos, the SQLite file and the voice cache live here; mount a volume at /app/data to keep them
-VOLUME /app/data
+# Photos, the SQLite file and the voice cache live in /app/data; mount a volume there to keep them
+# (on Railway: add a Volume in the dashboard, since Railway rejects the VOLUME instruction)
 
 EXPOSE 8000
 
