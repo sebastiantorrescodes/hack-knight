@@ -1,7 +1,9 @@
 """Reads Arduino serial lines, averages them, and stores the result in SQLite.
 
 Expected line format (from plant_monitor.ino):
-    soil=312,light=540,status=OK,lightStatus=DIM
+    soil=312,light=540,temp=23.5,humidity=65,status=OK,lightStatus=DIM,waterCount=0
+
+temp or humidity may be "ERR" when the DHT sensor fails; those readings are stored as NULL.
 """
 import logging
 import time

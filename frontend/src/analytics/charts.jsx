@@ -177,6 +177,101 @@ export function LightChart({ points, range, now }) {
   );
 }
 
+export function TempChart({ points, range, now }) {
+  const hasData = points.some((p) => p.temp != null);
+  return (
+    <ResponsiveContainer width="100%" height={HEIGHT}>
+      <ComposedChart data={points} margin={{ top: 16, right: 32, bottom: 0, left: 0 }}>
+        <CartesianGrid stroke={C.grid} vertical={false} />
+        {timeAxis(range, now)}
+        <YAxis domain={[0, 50]} ticks={[0, 10, 20, 30, 40, 50]} unit="°" width={44} {...axisProps} />
+        {threshold(10, "Cool 10°")}
+        {threshold(28, "Warm 28°")}
+        <Area
+          dataKey="tempRange"
+          stroke="none"
+          fill="var(--ios-red)"
+          fillOpacity={0.12}
+          isAnimationActive={false}
+          activeDot={false}
+        />
+        <Line
+          dataKey="temp"
+          stroke="var(--ios-red)"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          dot={false}
+          activeDot={{ r: 5, fill: "var(--ios-red)", stroke: C.surface, strokeWidth: 2 }}
+          isAnimationActive={false}
+        />
+        <Tooltip
+          cursor={crosshair}
+          content={
+            <Tip
+              rows={(p) =>
+                p.temp == null
+                  ? [{ name: "No readings", value: "" }]
+                  : [
+                      { name: "Average", value: `${formatNumber(p.temp, 1)}°C`, color: "var(--ios-red)" },
+                      ...(p.tempRange ? [{ name: "Range", value: `${formatNumber(p.tempRange[0], 1)}–${formatNumber(p.tempRange[1], 1)}°C` }] : []),
+                    ]
+              }
+            />
+          }
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function HumidityChart({ points, range, now }) {
+  return (
+    <ResponsiveContainer width="100%" height={HEIGHT}>
+      <ComposedChart data={points} margin={{ top: 16, right: 32, bottom: 0, left: 0 }}>
+        <CartesianGrid stroke={C.grid} vertical={false} />
+        {timeAxis(range, now)}
+        <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} unit="%" width={44} {...axisProps} />
+        {threshold(30, "Dry 30%")}
+        {threshold(60, "Humid 60%")}
+        <Area
+          dataKey="humidityRange"
+          stroke="none"
+          fill="var(--ios-teal)"
+          fillOpacity={0.12}
+          isAnimationActive={false}
+          activeDot={false}
+        />
+        <Line
+          dataKey="humidity"
+          stroke="var(--ios-teal)"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          dot={false}
+          activeDot={{ r: 5, fill: "var(--ios-teal)", stroke: C.surface, strokeWidth: 2 }}
+          isAnimationActive={false}
+        />
+        <Tooltip
+          cursor={crosshair}
+          content={
+            <Tip
+              rows={(p) =>
+                p.humidity == null
+                  ? [{ name: "No readings", value: "" }]
+                  : [
+                      { name: "Average", value: `${formatNumber(p.humidity, 1)}%`, color: "var(--ios-teal)" },
+                      ...(p.humidityRange ? [{ name: "Range", value: `${formatNumber(p.humidityRange[0], 1)}–${formatNumber(p.humidityRange[1], 1)}%` }] : []),
+                    ]
+              }
+            />
+          }
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function LeafChart({ points, range, now }) {
   const max = Math.max(40, ...points.map((p) => p.green));
   return (

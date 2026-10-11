@@ -165,7 +165,10 @@ def reading_history(plant_id, bucket_seconds, since):
         rows = conn.execute(
             """SELECT CAST(strftime('%s', ts) AS INTEGER) / :b * :b AS bucket,
                       AVG(soil) AS soil_avg, MIN(soil) AS soil_min, MAX(soil) AS soil_max,
-                      AVG(light) AS light_avg, COUNT(*) AS count
+                      AVG(light) AS light_avg,
+                      AVG(temp) AS temp_avg, MIN(temp) AS temp_min, MAX(temp) AS temp_max,
+                      AVG(humidity) AS humidity_avg, MIN(humidity) AS humidity_min, MAX(humidity) AS humidity_max,
+                      COUNT(*) AS count
                FROM readings
                WHERE plant_id = :p AND ts >= :since
                GROUP BY bucket
@@ -179,6 +182,12 @@ def reading_history(plant_id, bucket_seconds, since):
             "soil_min": r["soil_min"],
             "soil_max": r["soil_max"],
             "light_avg": round(r["light_avg"], 1),
+            "temp_avg": round(r["temp_avg"], 1) if r["temp_avg"] is not None else None,
+            "temp_min": r["temp_min"],
+            "temp_max": r["temp_max"],
+            "humidity_avg": round(r["humidity_avg"], 1) if r["humidity_avg"] is not None else None,
+            "humidity_min": r["humidity_min"],
+            "humidity_max": r["humidity_max"],
             "count": r["count"],
         }
         for r in rows

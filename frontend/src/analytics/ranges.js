@@ -21,6 +21,10 @@ export function fillBuckets(rows, range, now = Date.now()) {
       soil: r ? r.soil_avg : null,
       soilRange: r ? [r.soil_min, r.soil_max] : null,
       light: r ? r.light_avg : null,
+      temp: r ? r.temp_avg ?? null : null,
+      tempRange: r && r.temp_min != null ? [r.temp_min, r.temp_max] : null,
+      humidity: r ? r.humidity_avg ?? null : null,
+      humidityRange: r && r.humidity_min != null ? [r.humidity_min, r.humidity_max] : null,
       count: r ? r.count : 0,
     });
   }

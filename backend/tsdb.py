@@ -134,7 +134,10 @@ def history(plant_id, bucket_seconds, since):
         rows = conn.execute(
             """SELECT time_bucket(make_interval(secs => %s), ts) AS bucket,
                       avg(soil) AS soil_avg, min(soil) AS soil_min, max(soil) AS soil_max,
-                      avg(light) AS light_avg, count(*) AS count
+                      avg(light) AS light_avg,
+                      avg(temp) AS temp_avg, min(temp) AS temp_min, max(temp) AS temp_max,
+                      avg(humidity) AS humidity_avg, min(humidity) AS humidity_min, max(humidity) AS humidity_max,
+                      count(*) AS count
                FROM readings
                WHERE plant_id = %s AND ts >= %s
                GROUP BY bucket
@@ -148,6 +151,12 @@ def history(plant_id, bucket_seconds, since):
             "soil_min": r["soil_min"],
             "soil_max": r["soil_max"],
             "light_avg": round(r["light_avg"], 1),
+            "temp_avg": round(r["temp_avg"], 1) if r["temp_avg"] is not None else None,
+            "temp_min": r["temp_min"],
+            "temp_max": r["temp_max"],
+            "humidity_avg": round(r["humidity_avg"], 1) if r["humidity_avg"] is not None else None,
+            "humidity_min": r["humidity_min"],
+            "humidity_max": r["humidity_max"],
             "count": r["count"],
         }
         for r in rows

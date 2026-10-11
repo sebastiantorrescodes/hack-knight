@@ -3,7 +3,7 @@ import { getHealth } from "../api";
 import { usePlant } from "../PlantContext";
 import usePoll from "../usePoll";
 import ChartCard, { Empty, GlassCard } from "./ChartCard";
-import { LeafChart, LightChart, SoilChart } from "./charts";
+import { HumidityChart, LeafChart, LightChart, SoilChart, TempChart } from "./charts";
 import { RANGES, fillBuckets, formatNumber, formatTime, inRange, timeAgo } from "./ranges";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -130,6 +130,16 @@ export default function Analytics() {
           detail={soilTrend != null && ` ${soilTrend >= 0 ? "+" : ""}${formatNumber(soilTrend)} over ${range.label.toLowerCase()}`}
         />
         <StatTile label="Light now" value={r ? formatNumber(r.light) : "–"} detail={r?.light_status?.toLowerCase()} />
+        <StatTile
+          label="Temperature now"
+          value={r?.temp != null ? `${formatNumber(r.temp, 1)}°C` : "–"}
+          detail={r?.temp != null ? (r.temp < 10 ? "chilly" : r.temp < 28 ? "comfortable" : "hot") : undefined}
+        />
+        <StatTile
+          label="Humidity now"
+          value={r?.humidity != null ? `${formatNumber(r.humidity, 1)}%` : "–"}
+          detail={r?.humidity != null ? (r.humidity < 30 ? "dry air" : r.humidity < 60 ? "just right" : "humid") : undefined}
+        />
         <StatTile label="Readings" value={formatNumber(readingCount)} detail={range.label.toLowerCase()} />
         <StatTile label="Waterings" value={waterings.length} detail={range.label.toLowerCase()} />
         <StatTile
@@ -166,6 +176,36 @@ export default function Analytics() {
           columns={[timeCol, { key: "light", label: "Average light", format: (v) => formatNumber(v, 1) }]}
         >
           <LightChart points={points} range={range} now={now} />
+        </ChartCard>
+
+        <ChartCard
+          title="Temperature"
+          subtitle={`Average per ${range.bucket} bucket, shaded band is min–max`}
+          rows={withData}
+          dimmed={history.loading && !!history.data}
+          empty="No readings in this range yet"
+          columns={[
+            timeCol,
+            { key: "temp", label: "Average (°C)", format: (v) => formatNumber(v, 1) },
+            { key: "tempRange", label: "Min–max (°C)", format: (v) => v ? `${formatNumber(v[0], 1)}–${formatNumber(v[1], 1)}` : "–" },
+          ]}
+        >
+          <TempChart points={points} range={range} now={now} />
+        </ChartCard>
+
+        <ChartCard
+          title="Humidity"
+          subtitle={`Average per ${range.bucket} bucket, shaded band is min–max`}
+          rows={withData}
+          dimmed={history.loading && !!history.data}
+          empty="No readings in this range yet"
+          columns={[
+            timeCol,
+            { key: "humidity", label: "Average (%)", format: (v) => formatNumber(v, 1) },
+            { key: "humidityRange", label: "Min–max (%)", format: (v) => v ? `${formatNumber(v[0], 1)}–${formatNumber(v[1], 1)}` : "–" },
+          ]}
+        >
+          <HumidityChart points={points} range={range} now={now} />
         </ChartCard>
 
         <ChartCard
