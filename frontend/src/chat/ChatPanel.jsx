@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
-import { ArrowUp, Mic, MicOff, Square, Volume2, VolumeX, X } from "lucide-react";
+import { ConversationProvider } from "@elevenlabs/react";
+import { ArrowUp, Mic, MicOff, Phone, PhoneOff, Square, Volume2, VolumeX, X } from "lucide-react";
 import { signedUrl } from "../api";
 import { PlantChatTransport } from "./transport";
+import { useVoiceCall } from "./useVoiceCall";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -111,7 +113,43 @@ function useSpeech({ onResult, onSend }) {
   return { listening, supported, start, stop };
 }
 
-export default function ChatPanel({ plantId, name, onClose }) {
+/** One line of the live call: who's talking now, plus mute and hang up. */
+function CallBar({ name, call }) {
+  const label = call.connecting ? `Calling ${name}…` : call.speaking ? `${name} is talking…` : "Listening… just talk!";
+  return (
+    <div className="mx-4 mt-2 flex items-center gap-2 rounded-full bg-ios-green/12 py-1.5 pr-1.5 pl-4">
+      <span className={cn("size-2.5 shrink-0 rounded-full bg-ios-green", !call.connecting && "animate-pulse")} />
+      <span className="flex-1 truncate text-[14px] font-semibold text-ios-green" aria-live="polite">{label}</span>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        className="rounded-full"
+        onClick={() => call.setMuted(!call.muted)}
+        disabled={!call.connected}
+        aria-pressed={call.muted}
+        aria-label={call.muted ? "Unmute" : "Mute"}
+        title={call.muted ? "Unmute" : "Mute"}
+      >
+        {call.muted ? <MicOff /> : <Mic />}
+      </Button>
+      <Button type="button" size="sm" variant="destructive" className="rounded-full" onClick={call.end}>
+        <PhoneOff /> End
+      </Button>
+    </div>
+  );
+}
+
+/** The panel lives inside ConversationProvider so the live voice call (ElevenLabs agent) can run in it. */
+export default function ChatPanel(props) {
+  return (
+    <ConversationProvider>
+      <ChatPanelBody {...props} />
+    </ConversationProvider>
+  );
+}
+
+function ChatPanelBody({ plantId, name, onClose }) {
   const transport = useMemo(() => new PlantChatTransport(plantId), [plantId]);
   const [voice, setVoice] = useState(true);
   const voiceRef = useRef(voice);
@@ -132,12 +170,27 @@ export default function ChatPanel({ plantId, name, onClose }) {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, status]);
 
+  // Live call transcript, shown after the typed chat
+  const [voiceTurns, setVoiceTurns] = useState([]);
+  const addTurn = useCallback((turn) => setVoiceTurns((turns) => [...turns, { id: turns.length, ...turn }]), []);
+  const call = useVoiceCall({ plantId, onTurn: addTurn });
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [voiceTurns]);
+
   const send = useCallback((text) => {
     const t = text.trim();
-    if (!t || busy) return;
-    sendMessage({ text: t });
+    if (!t) return;
+    if (call.connected) {
+      // Typing during a call goes to the voice agent, which answers out loud
+      call.sendText(t);
+      addTurn({ kind: "text", role: "user", text: t });
+    } else if (!busy && !call.active) {
+      sendMessage({ text: t });
+    } else return;
     setInput("");
-  }, [busy, sendMessage]);
+  }, [busy, sendMessage, call, addTurn]);
 
   const { listening, supported: micSupported, start: startMic, stop: stopMic } = useSpeech({
     onResult: (transcript) => setInput(transcript),
@@ -157,10 +210,21 @@ export default function ChatPanel({ plantId, name, onClose }) {
           </span>
           <div>
             <h2 className="font-rounded text-lg leading-tight font-bold">{name}</h2>
-            <p className="text-xs text-muted-foreground">{busy ? "typing…" : "Your plant"}</p>
+            <p className="text-xs text-muted-foreground">{call.active ? "on a call" : busy ? "typing…" : "Your plant"}</p>
           </div>
         </div>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1">
+          {!call.active && (
+            <Button
+              size="sm"
+              className="rounded-full bg-ios-green hover:bg-ios-green/90"
+              onClick={call.start}
+              disabled={busy}
+              title={`Talk to ${name} out loud`}
+            >
+              <Phone /> Talk live
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -182,7 +246,7 @@ export default function ChatPanel({ plantId, name, onClose }) {
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex min-h-full flex-col gap-2.5 p-4" aria-live="polite">
-          {messages.length === 0 && (
+          {messages.length === 0 && voiceTurns.length === 0 && (
             <div className="my-auto flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
               <span className="text-5xl">🪴</span>
               <p className="max-w-60 text-[15px]">Hi! I'm {name}. Ask me how I'm doing, or tell me to pour some water!</p>
@@ -213,6 +277,29 @@ export default function ChatPanel({ plantId, name, onClose }) {
             );
           })}
 
+          {voiceTurns.map((turn) => {
+            if (turn.kind === "tool") {
+              const part = {
+                state: "output-available",
+                toolName: turn.name,
+                output: turn.failed ? { error: "failed" } : { ok: true },
+              };
+              return <div key={turn.id} className="self-start"><ToolChip part={part} /></div>;
+            }
+            const mine = turn.role === "user";
+            return (
+              <div
+                key={turn.id}
+                className={cn(
+                  "max-w-[85%] rounded-[20px] px-3.5 py-2 text-[15px] leading-snug whitespace-pre-wrap",
+                  mine ? "self-end rounded-br-md bg-ios-blue text-white" : "self-start rounded-bl-md bg-secondary"
+                )}
+              >
+                {turn.text}
+              </div>
+            );
+          })}
+
           {status === "submitted" && (
             <div className="flex gap-1 self-start rounded-[20px] rounded-bl-md bg-secondary px-4 py-3.5" aria-label={`${name} is thinking`}>
               <span className="typing-dot size-2 rounded-full bg-muted-foreground" />
@@ -221,22 +308,27 @@ export default function ChatPanel({ plantId, name, onClose }) {
             </div>
           )}
           {error && <div className="rounded-2xl bg-ios-red/10 px-3 py-2 text-sm text-ios-red">😵 {error.message}</div>}
+          {call.error && <div className="rounded-2xl bg-ios-red/10 px-3 py-2 text-sm text-ios-red">📞 {call.error}</div>}
           <div ref={endRef} />
         </div>
       </ScrollArea>
 
-      <div className="flex gap-2 overflow-x-auto px-4 pt-2 [scrollbar-width:none]">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            onClick={() => send(s)}
-            disabled={busy}
-            className="shrink-0 rounded-full border bg-background/50 px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-accent disabled:opacity-50"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      {call.active ? (
+        <CallBar name={name} call={call} />
+      ) : (
+        <div className="flex gap-2 overflow-x-auto px-4 pt-2 [scrollbar-width:none]">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              onClick={() => send(s)}
+              disabled={busy}
+              className="shrink-0 rounded-full border bg-background/50 px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-accent disabled:opacity-50"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
 
       <form
         className="flex items-center gap-2 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
@@ -245,7 +337,7 @@ export default function ChatPanel({ plantId, name, onClose }) {
           send(input);
         }}
       >
-        {micSupported && (
+        {micSupported && !call.active && (
           <Button
             type="button"
             size="icon"
@@ -263,7 +355,7 @@ export default function ChatPanel({ plantId, name, onClose }) {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={listening ? "Listening…" : `Message ${name}`}
+            placeholder={listening ? "Listening…" : call.connected ? "Or type, and I'll answer out loud" : `Message ${name}`}
             aria-label="Message"
             maxLength={2000}
             className="min-w-0 flex-1 bg-transparent py-1.5 text-[15px] outline-none placeholder:text-muted-foreground"

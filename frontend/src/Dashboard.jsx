@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { UserButton } from "@clerk/react";
 import { BarChart3, Check, ChevronDown, CloudRain, MessageCircle, Pencil, Plus, Sprout } from "lucide-react";
 import { updatePlant } from "./api";
@@ -10,12 +10,14 @@ import PlantAvatar from "./components/PlantAvatar";
 import Meters from "./components/Meters";
 import PlantCam from "./components/PlantCam";
 import Analytics from "./analytics/Analytics";
-import ChatPanel from "./chat/ChatPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+// The chat carries the ElevenLabs voice SDK, so it loads after the rest of the dashboard
+const ChatPanel = lazy(() => import("./chat/ChatPanel"));
 
 const EXPLAIN_MS = 12000;
 const TABS = [
@@ -221,7 +223,9 @@ export default function Dashboard({ plants, onSelectPlant, onAddPlant, onPlantCh
             "lg:sticky lg:top-0 lg:z-auto lg:h-dvh lg:translate-y-0 lg:p-4 lg:pl-0"
           )}
         >
-          <ChatPanel plantId={plant.id} name={plant.name} onClose={() => setChatOpen(false)} />
+          <Suspense fallback={<div className="glass-strong h-full rounded-t-[28px] lg:rounded-[28px]" />}>
+            <ChatPanel plantId={plant.id} name={plant.name} onClose={() => setChatOpen(false)} />
+          </Suspense>
         </div>
       </div>
 
