@@ -152,6 +152,8 @@ class Reading(BaseModel):
     light: float
     status: str
     light_status: str
+    temp: Optional[float] = None
+    humidity: Optional[float] = None
 
 
 class ReadingBatch(BaseModel):
@@ -217,9 +219,10 @@ def add_readings(batch: ReadingBatch):
     if rows:
         last = rows[-1]
         log.info(
-            "reading %s: %d new, %d duplicate | latest soil=%s (%s) light=%s (%s)",
+            "reading %s: %d new, %d duplicate | latest soil=%s (%s) light=%s (%s) temp=%s humidity=%s",
             batch.plant_id, inserted, len(rows) - inserted,
             last["soil"], last["status"], last["light"], last["light_status"],
+            last.get("temp"), last.get("humidity"),
         )
     # Duplicates are already stored, so every id in the batch is safe for the Pi to mark sent
     return {"accepted_ids": [r.id for r in batch.readings], "inserted": inserted}

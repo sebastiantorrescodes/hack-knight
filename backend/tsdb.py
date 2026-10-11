@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS readings (
     light        DOUBLE PRECISION NOT NULL,
     status       TEXT             NOT NULL,
     light_status TEXT             NOT NULL,
+    temp         DOUBLE PRECISION,
+    humidity     DOUBLE PRECISION,
     received_at  TIMESTAMPTZ      NOT NULL DEFAULT now(),
     UNIQUE (plant_id, ts)
 ) WITH (
@@ -29,6 +31,8 @@ CREATE TABLE IF NOT EXISTS readings (
     tsdb.segmentby = 'plant_id',
     tsdb.orderby = 'ts DESC'
 );
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS temp     DOUBLE PRECISION;
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS humidity DOUBLE PRECISION;
 """
 
 log = logging.getLogger("tsdb")
@@ -86,8 +90,8 @@ def insert_readings(plant_id, readings):
         return 0
     with _connection() as conn:
         cur = conn.execute(
-            """INSERT INTO readings (plant_id, ts, soil, light, status, light_status)
-               SELECT %s, * FROM unnest(%s::timestamptz[], %s::float8[], %s::float8[], %s::text[], %s::text[])
+            """INSERT INTO readings (plant_id, ts, soil, light, status, light_status, temp, humidity)
+               SELECT %s, * FROM unnest(%s::timestamptz[], %s::float8[], %s::float8[], %s::text[], %s::text[], %s::float8[], %s::float8[])
                ON CONFLICT (plant_id, ts) DO NOTHING""",
             (
                 plant_id,
@@ -96,6 +100,8 @@ def insert_readings(plant_id, readings):
                 [r["light"] for r in readings],
                 [r["status"] for r in readings],
                 [r["light_status"] for r in readings],
+                [r.get("temp") for r in readings],
+                [r.get("humidity") for r in readings],
             ),
         )
         return cur.rowcount

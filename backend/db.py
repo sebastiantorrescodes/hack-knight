@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS readings (
     light        REAL NOT NULL,
     status       TEXT NOT NULL,
     light_status TEXT NOT NULL,
+    temp         REAL,
+    humidity     REAL,
     received_at  TEXT NOT NULL,
     UNIQUE (plant_id, ts)
 );
@@ -90,6 +92,12 @@ def init():
     with connect() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(SCHEMA)
+        # Migrate existing readings table if temp/humidity columns are missing
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(readings)")}
+        if "temp" not in cols:
+            conn.execute("ALTER TABLE readings ADD COLUMN temp REAL")
+        if "humidity" not in cols:
+            conn.execute("ALTER TABLE readings ADD COLUMN humidity REAL")
     if USE_TIGER:
         tsdb.init()
 
@@ -117,9 +125,10 @@ def insert_readings(plant_id, readings):
     with connect() as conn:
         before = conn.total_changes
         conn.executemany(
-            """INSERT OR IGNORE INTO readings (plant_id, ts, soil, light, status, light_status, received_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            [(plant_id, r["ts"], r["soil"], r["light"], r["status"], r["light_status"], received) for r in readings],
+            """INSERT OR IGNORE INTO readings (plant_id, ts, soil, light, status, light_status, temp, humidity, received_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [(plant_id, r["ts"], r["soil"], r["light"], r["status"], r["light_status"],
+              r.get("temp"), r.get("humidity"), received) for r in readings],
         )
         return conn.total_changes - before
 
