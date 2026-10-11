@@ -7,7 +7,6 @@ import { timeAgo } from "../analytics/ranges";
 import { PlantChatTransport } from "./transport";
 import { useVoiceCall } from "./useVoiceCall";
 import ToolChip from "./ToolChip";
-import CallStage from "./CallStage";
 import { playWithVoice } from "../voice";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -140,7 +139,7 @@ export default function ChatPanel(props) {
   );
 }
 
-function ChatPanelBody({ plantId, name, onClose }) {
+function ChatPanelBody({ plantId, name, onClose, onCallChange }) {
   const transport = useMemo(() => new PlantChatTransport(plantId), [plantId]);
   const [voice, setVoice] = useState(true);
   const voiceRef = useRef(voice);
@@ -184,6 +183,33 @@ function ChatPanelBody({ plantId, name, onClose }) {
   const [voiceTurns, setVoiceTurns] = useState([]);
   const addTurn = useCallback((turn) => setVoiceTurns((turns) => [...turns, { id: turns.length, ...turn }]), []);
   const call = useVoiceCall({ plantId, onTurn: addTurn, silent: !voice });
+
+  // The dashboard's plant card is the call screen (Planty, subtitles, waveform), so hand it the live call.
+  // The call itself stays here, so the voice SDK keeps loading with the chat instead of with the page.
+  const callRef = useRef(call);
+  callRef.current = call;
+  const inputFrequency = useCallback(() => callRef.current.inputFrequency(), []);
+  const outputFrequency = useCallback(() => callRef.current.outputFrequency(), []);
+  const callStart = useRef(0); // where this call's turns begin, so an earlier call's last line isn't a subtitle
+  useEffect(() => {
+    if (call.active) callStart.current = voiceTurns.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [call.active]);
+  useEffect(() => {
+    onCallChange?.(
+      call.active
+        ? {
+            connecting: call.connecting,
+            connected: call.connected,
+            speaking: call.speaking,
+            turns: voiceTurns.slice(callStart.current),
+            inputFrequency,
+            outputFrequency,
+          }
+        : null
+    );
+  }, [call.active, call.connecting, call.connected, call.speaking, voiceTurns, inputFrequency, outputFrequency, onCallChange]);
+  useEffect(() => () => onCallChange?.(null), [onCallChange]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -279,9 +305,8 @@ function ChatPanelBody({ plantId, name, onClose }) {
         </div>
       </header>
 
-      {/* During a live call the panel becomes a call screen; the transcript shows in the chat once it ends */}
-      {call.active ? <CallStage name={name} call={call} turns={voiceTurns} /> : (
-      <ScrollArea className="min-h-0 flex-1">
+      {/* During a call the transcript fills in here on wide screens; on phones the sheet shrinks to the call bar */}
+      <ScrollArea className={cn("min-h-0 flex-1", call.active && "max-lg:hidden")}>
         <div className="flex min-h-full flex-col gap-2.5 p-4" aria-live="polite">
           {historyLoaded && messages.length === 0 && voiceTurns.length === 0 && (
             <div className="my-auto flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
@@ -355,7 +380,6 @@ function ChatPanelBody({ plantId, name, onClose }) {
           <div ref={endRef} />
         </div>
       </ScrollArea>
-      )}
 
       {call.active ? (
         <CallBar name={name} call={call} />

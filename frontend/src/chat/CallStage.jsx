@@ -1,11 +1,10 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ToolChip from "./ToolChip";
+import { LiveWaveform } from "@/components/ui/live-waveform";
 import { cn } from "@/lib/utils";
 
-// three.js is heavy and only needed once a call starts
-const Orb = lazy(() => import("@/components/ui/orb").then((m) => ({ default: m.Orb })));
-
-const ORB_COLORS = ["#5ed37a", "#c8f5d2"]; // leafy greens instead of the default blues
+// The SDK's frequency data has 1024 bins; speech lives in roughly the lowest fifth
+const VOICE_BINS = [0.01, 0.22];
 const MAX_WORDS = 8; // per subtitle line
 const MS_PER_WORD = 360; // about how fast the plant's voice talks
 const MIN_LINE_MS = 900;
@@ -74,32 +73,35 @@ function useRecentTool(turns) {
   return shown;
 }
 
-/** What a live call looks like: an orb that moves with both voices, and subtitles of what the plant says. */
-export default function CallStage({ name, call, turns }) {
+/**
+ * What a live call looks like: a waveform of whoever is talking (green for the plant, blue for the kid),
+ * and subtitles of what the plant says.
+ */
+export default function CallStage({ name, call, turns, className }) {
   const lastAgentText = useMemo(
     () => [...turns].reverse().find((t) => t.kind === "text" && t.role === "agent")?.text,
     [turns]
   );
   const subtitle = useSubtitle(lastAgentText, call.speaking);
   const tool = useRecentTool(turns);
-  const agentState = call.connecting ? "thinking" : call.speaking ? "talking" : "listening";
 
   const hint = call.connecting ? `Calling ${name}…` : `Say hi to ${name}!`;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 p-6">
-      <div className="relative size-52 sm:size-60">
-        <Suspense fallback={<div className="size-full animate-pulse rounded-full bg-ios-green/15" />}>
-          <Orb
-            colors={ORB_COLORS}
-            agentState={agentState}
-            volumeMode={call.connected ? "manual" : "auto"}
-            getInputVolume={call.inputVolume}
-            getOutputVolume={call.outputVolume}
-            className="size-full"
-          />
-        </Suspense>
-      </div>
+    <div className={cn("flex flex-col items-center justify-center gap-4", className)}>
+      <LiveWaveform
+        active={call.connected}
+        processing={call.connecting}
+        getFrequencyData={call.speaking ? call.outputFrequency : call.inputFrequency}
+        frequencyRange={VOICE_BINS}
+        sensitivity={1.6}
+        barWidth={4}
+        barGap={3}
+        barRadius={2}
+        height={120}
+        fadeWidth={48}
+        className={cn("w-full max-w-sm transition-colors duration-300", call.speaking ? "text-ios-green" : "text-ios-blue")}
+      />
 
       <div className="flex h-8 items-center">
         {tool && (

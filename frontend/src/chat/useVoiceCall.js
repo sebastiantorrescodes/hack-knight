@@ -4,6 +4,7 @@ import { getVoiceSession } from "../api";
 import { setVoiceSource } from "../voice";
 
 const CALL_VOLUME_GAIN = 2.5; // getOutputVolume() stays well under 1 for normal speech
+const NO_AUDIO = new Uint8Array(1024); // all zeros: a flat waveform
 
 /**
  * A live speech-to-speech call with the plant's ElevenLabs agent. Must be inside a ConversationProvider.
@@ -70,9 +71,9 @@ export function useVoiceCall({ plantId, onTurn, silent = false }) {
     speaking: conversation.isSpeaking,
     muted: conversation.isMuted,
     setMuted: conversation.setMuted,
-    // 0-1 loudness of the kid's mic and the plant's voice, for the call's orb
-    inputVolume: () => (connected && !conversation.isMuted ? Math.min(1, conversation.getInputVolume() * 2) : 0),
-    outputVolume: () => (connected && !silent ? Math.min(1, outputVolume.current() * CALL_VOLUME_GAIN) : 0),
+    // Frequency data of the kid's mic and the plant's voice, for the call's waveform (empty while silenced)
+    inputFrequency: () => (connected && !conversation.isMuted ? conversation.getInputByteFrequencyData() : NO_AUDIO),
+    outputFrequency: () => (connected && !silent ? conversation.getOutputByteFrequencyData() : NO_AUDIO),
     error,
   };
 }

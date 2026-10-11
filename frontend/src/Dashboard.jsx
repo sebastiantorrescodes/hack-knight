@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { UserButton } from "@clerk/react";
-import { BarChart3, Check, ChevronDown, CloudRain, MessageCircle, Pencil, Plus, Sprout } from "lucide-react";
+import { BarChart3, Check, ChevronDown, CloudRain, MessageCircle, Pencil, Phone, Plus, Sprout } from "lucide-react";
 import { updatePlant } from "./api";
 import { usePlant } from "./PlantContext";
 import usePoll from "./usePoll";
@@ -10,6 +10,7 @@ import PlantAvatar from "./components/PlantAvatar";
 import Meters from "./components/Meters";
 import PlantCam from "./components/PlantCam";
 import Analytics from "./analytics/Analytics";
+import CallStage from "./chat/CallStage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,7 +39,22 @@ const today = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long
 
 const tabFromHash = () => (window.location.hash === "#data" ? "data" : "plant");
 
-function PlantView({ name, status, error }) {
+/** During a live call the plant card becomes the call screen: a big Planty, with subtitles and a waveform beside it. */
+function CallCard({ name, mood, call }) {
+  return (
+    <section className="glass grid items-center gap-2 rounded-3xl p-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] md:gap-6 md:p-8">
+      <div className="relative flex flex-col items-center">
+        <span className="flex items-center gap-1.5 self-start rounded-full bg-ios-green/15 px-3 py-1 text-xs font-semibold text-ios-green">
+          <Phone className="size-3.5" /> On a call
+        </span>
+        <PlantAvatar mood={mood.key} className="w-[min(340px,75%)] md:w-[min(420px,90%)]" />
+      </div>
+      <CallStage name={name} call={call} turns={call.turns} />
+    </section>
+  );
+}
+
+function PlantView({ name, status, error, call }) {
   const mood = getMood(status, error);
   const tag = MOOD_TAG[mood.key];
   const [explanation, setExplanation] = useState(null);
@@ -48,6 +64,9 @@ function PlantView({ name, status, error }) {
     const id = setTimeout(() => setExplanation(null), EXPLAIN_MS);
     return () => clearTimeout(id);
   }, [explanation]);
+
+  // The camera and meters step aside so Planty can be big; they come back when the call ends
+  if (call) return <CallCard name={name} mood={mood} call={call} />;
 
   return (
     <div className="flex flex-col gap-5">
@@ -148,12 +167,21 @@ export default function Dashboard({ plants, onSelectPlant, onAddPlant, onPlantCh
   const { data: status, error } = usePoll(api.getStatus, 5000);
   const [tab, setTab] = useState(tabFromHash);
   const [chatOpen, setChatOpen] = useState(false); // only matters on narrow screens
+  const [liveCall, setLiveCall] = useState(null); // set by the chat while a voice call is on
+  const onCall = !!liveCall;
 
   useEffect(() => {
     const onHash = () => setTab(tabFromHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
+
+  // A call shows at the top of the Plant tab, so go there when one starts
+  useEffect(() => {
+    if (!onCall) return;
+    if (tabFromHash() !== "plant") window.location.hash = "plant";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [onCall]);
 
   const saved = status?.skipped_waterings ?? 0;
 
@@ -204,7 +232,7 @@ export default function Dashboard({ plants, onSelectPlant, onAddPlant, onPlantCh
             <PlantSwitcher plants={plants} current={plant} onSelectPlant={onSelectPlant} onAddPlant={onAddPlant} />
           </div>
 
-          {tab === "data" ? <Analytics /> : <PlantView name={plant.name} status={status} error={error} />}
+          {tab === "data" ? <Analytics /> : <PlantView name={plant.name} status={status} error={error} call={liveCall} />}
         </div>
 
         {/* One chat instance: a floating sidebar on wide screens, a bottom sheet on narrow ones */}
@@ -213,18 +241,26 @@ export default function Dashboard({ plants, onSelectPlant, onAddPlant, onPlantCh
           onClick={() => setChatOpen(false)}
           className={cn(
             "fixed inset-0 z-30 bg-black/25 backdrop-blur-[2px] transition-opacity duration-300 lg:hidden",
-            chatOpen ? "opacity-100" : "pointer-events-none opacity-0"
+            chatOpen && !onCall ? "opacity-100" : "pointer-events-none opacity-0"
           )}
         />
+        {/* On a call the phone sheet shrinks to the call bar, so the big Planty above it stays in view */}
         <div
           className={cn(
-            "fixed inset-x-0 bottom-0 z-40 h-[min(85dvh,700px)] transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
+            "fixed inset-x-0 bottom-0 z-40 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
+            onCall ? "h-auto" : "h-[min(85dvh,700px)]",
             chatOpen ? "translate-y-0" : "translate-y-full",
             "lg:sticky lg:top-0 lg:z-auto lg:h-dvh lg:translate-y-0 lg:p-4 lg:pl-0"
           )}
         >
           <Suspense fallback={<div className="glass-strong h-full rounded-t-[28px] lg:rounded-[28px]" />}>
-            <ChatPanel key={plant.id} plantId={plant.id} name={plant.name} onClose={() => setChatOpen(false)} />
+            <ChatPanel
+              key={plant.id}
+              plantId={plant.id}
+              name={plant.name}
+              onClose={() => setChatOpen(false)}
+              onCallChange={setLiveCall}
+            />
           </Suspense>
         </div>
       </div>
