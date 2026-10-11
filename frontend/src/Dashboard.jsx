@@ -169,6 +169,12 @@ export default function Dashboard({ plants, onSelectPlant, onAddPlant, onPlantCh
   const [chatOpen, setChatOpen] = useState(false); // only matters on narrow screens
   const [liveCall, setLiveCall] = useState(null); // set by the chat while a voice call is on
   const onCall = !!liveCall;
+  const [ask, setAsk] = useState(null); // a chart question from Garden data, for the chat to send
+
+  const askAboutChart = (question, chart) => {
+    setAsk({ id: Date.now(), question, chart });
+    setChatOpen(true); // on phones the answer shows in the chat sheet
+  };
 
   useEffect(() => {
     const onHash = () => setTab(tabFromHash());
@@ -232,7 +238,7 @@ export default function Dashboard({ plants, onSelectPlant, onAddPlant, onPlantCh
             <PlantSwitcher plants={plants} current={plant} onSelectPlant={onSelectPlant} onAddPlant={onAddPlant} />
           </div>
 
-          {tab === "data" ? <Analytics /> : <PlantView name={plant.name} status={status} error={error} call={liveCall} />}
+          {tab === "data" ? <Analytics onAsk={askAboutChart} /> :<PlantView name={plant.name} status={status} error={error} call={liveCall} />}
         </div>
 
         {/* One chat instance: a floating sidebar on wide screens, a bottom sheet on narrow ones */}
@@ -258,6 +264,8 @@ export default function Dashboard({ plants, onSelectPlant, onAddPlant, onPlantCh
               key={plant.id}
               plantId={plant.id}
               name={plant.name}
+              mood={getMood(status, error).key}
+              ask={ask}
               onClose={() => setChatOpen(false)}
               onCallChange={setLiveCall}
             />

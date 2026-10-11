@@ -158,7 +158,8 @@ def agent_profile(plant_id):
     try:
         with _connection() as conn:
             return conn.execute(
-                """SELECT p.name, p.species, p.indoors, p.location_name, p.lat, p.lon, u.kids_ages
+                """SELECT p.name, p.species, p.indoors, p.location_name, p.lat, p.lon,
+                          u.role, u.kids_ages, u.experience, u.goals
                    FROM plants p JOIN users u ON u.clerk_id = p.owner_id
                    WHERE p.id = %s""",
                 (plant_id,),

@@ -4,15 +4,27 @@ import { ConversationProvider } from "@elevenlabs/react";
 import { ArrowUp, Mic, MicOff, Phone, PhoneOff, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { clearChatHistory, getChatHistory, signedUrl } from "../api";
 import { timeAgo } from "../analytics/ranges";
-import { PlantChatTransport } from "./transport";
+import { CHART_MARKER, PlantChatTransport } from "./transport";
 import { useVoiceCall } from "./useVoiceCall";
 import ToolChip from "./ToolChip";
+import GlossaryText from "./GlossaryText";
 import { playWithVoice } from "../voice";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
-const SUGGESTIONS = ["💧 Pour some water", "Are you thirsty?", "Will it rain today?", "How do your leaves look?"];
+// Kids tap more than they type, so the chips are the lesson menu: each mood leads with a question about what
+// the plant is going through right now (keys match getMood in plant.js)
+const POUR = "💧 Pour some water";
+const QUIZ = "🧠 Quiz me!";
+const SUGGESTIONS = {
+  thirsty: ["Why do you need water?", POUR, "How do roots drink?", "Will it rain soon?", QUIZ],
+  soggy: ["Can plants get too much water?", "Why do roots need air?", "When will you dry out?", QUIZ],
+  sleepy: ["What do plants do at night?", "Do plants sleep?", "Why do you need light?", QUIZ],
+  happy: ["How do you make food?", "Why are leaves green?", "How do your leaves look?", POUR, QUIZ],
+  okay: ["Do you want more sun?", "How do you make food?", "How do your leaves look?", POUR, QUIZ],
+  offline: ["How do your sensors work?", "Tell me a plant fact!", QUIZ],
+};
 
 /** Stored agent runs (from /agent/chat/history) as useChat messages, shaped like the ones the transport streams. */
 function runsToMessages(runs) {
@@ -35,7 +47,10 @@ function runsToMessages(runs) {
     };
     // A check-in has no question: the plant did it on its own
     if (run.trigger === "check") return [assistant];
-    return [{ id: `run-${run.id}-q`, role: "user", parts: [{ type: "text", text: run.prompt }] }, assistant];
+    const [question, chart] = run.prompt.split(CHART_MARKER);
+    const user = { id: `run-${run.id}-q`, role: "user", parts: [{ type: "text", text: question }] };
+    if (chart) user.metadata = { chart };
+    return [user, assistant];
   });
 }
 
@@ -139,7 +154,7 @@ export default function ChatPanel(props) {
   );
 }
 
-function ChatPanelBody({ plantId, name, onClose, onCallChange }) {
+function ChatPanelBody({ plantId, name, mood, ask, onClose, onCallChange }) {
   const transport = useMemo(() => new PlantChatTransport(plantId), [plantId]);
   const [voice, setVoice] = useState(true);
   const voiceRef = useRef(voice);
@@ -227,6 +242,21 @@ function ChatPanelBody({ plantId, name, onClose, onCallChange }) {
     } else return;
     setInput("");
   }, [busy, sendMessage, call, addTurn]);
+
+  // "Ask the plant about this chart" from the Garden data tab: the bubble shows the question, and the chart
+  // goes along hidden for the plant to read. During a call the voice agent gets both.
+  const handledAsk = useRef(null);
+  useEffect(() => {
+    if (!ask || ask.id === handledAsk.current) return;
+    handledAsk.current = ask.id;
+    if (call.connected) {
+      call.sendText(ask.question + CHART_MARKER + ask.chart);
+      addTurn({ kind: "text", role: "user", text: ask.question });
+    } else if (!busy && !call.active) {
+      sendMessage({ text: ask.question, metadata: { chart: ask.chart } });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask]);
 
   const [clearError, setClearError] = useState(null);
   const clearChat = async () => {
@@ -319,6 +349,9 @@ function ChatPanelBody({ plantId, name, onClose, onCallChange }) {
             const mine = m.role === "user";
             return (
               <div key={m.id} className={cn("flex max-w-[85%] flex-col gap-1.5", mine ? "items-end self-end" : "items-start self-start")}>
+                {m.metadata?.chart && (
+                  <p className="px-1 text-xs font-semibold text-muted-foreground">📈 Sent a chart from Garden data</p>
+                )}
                 {m.metadata?.checkIn && (
                   <p className="px-1 text-xs font-semibold text-muted-foreground">
                     🌙 While you were away · {timeAgo(m.metadata.checkIn)}
@@ -335,7 +368,7 @@ function ChatPanelBody({ plantId, name, onClose, onCallChange }) {
                           mine ? "rounded-br-md bg-ios-blue text-white" : "rounded-bl-md bg-secondary"
                         )}
                       >
-                        {part.text}
+                        {mine ? part.text : <GlossaryText text={part.text} name={name} onAsk={send} />}
                       </div>
                     );
                   return null;
@@ -362,7 +395,7 @@ function ChatPanelBody({ plantId, name, onClose, onCallChange }) {
                   mine ? "self-end rounded-br-md bg-ios-blue text-white" : "self-start rounded-bl-md bg-secondary"
                 )}
               >
-                {turn.text}
+                {mine ? turn.text : <GlossaryText text={turn.text} name={name} onAsk={send} />}
               </div>
             );
           })}
@@ -385,7 +418,7 @@ function ChatPanelBody({ plantId, name, onClose, onCallChange }) {
         <CallBar name={name} call={call} />
       ) : (
         <div className="flex gap-2 overflow-x-auto px-4 pt-2 [scrollbar-width:none]">
-          {SUGGESTIONS.map((s) => (
+          {(SUGGESTIONS[mood] ?? SUGGESTIONS.okay).map((s) => (
             <button
               key={s}
               onClick={() => send(s)}

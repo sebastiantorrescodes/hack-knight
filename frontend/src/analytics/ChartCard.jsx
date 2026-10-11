@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,8 +28,9 @@ export function Empty({ children }) {
 /**
  * Card around one chart: title, subtitle, the chart, and a "Show table" toggle so every value
  * is readable without hovering. `columns` is [{ key, label, format? }] and `rows` the table data.
+ * With `onAsk`, an "Ask {plantName}" button has the plant explain the chart in the chat.
  */
-export default function ChartCard({ title, subtitle, columns, rows, empty, dimmed, children }) {
+export default function ChartCard({ title, subtitle, columns, rows, empty, dimmed, plantName, onAsk, children }) {
   const [table, setTable] = useState(false);
   return (
     <GlassCard
@@ -37,15 +39,27 @@ export default function ChartCard({ title, subtitle, columns, rows, empty, dimme
       dimmed={dimmed}
       action={
         rows?.length > 0 && (
-          <Button
-            variant="secondary"
-            size="sm"
-            className="rounded-full text-[13px]"
-            onClick={() => setTable((t) => !t)}
-            aria-pressed={table}
-          >
-            {table ? "Show chart" : "Show table"}
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            {onAsk && (
+              <Button
+                size="sm"
+                className="rounded-full bg-ios-green text-[13px] hover:bg-ios-green/90"
+                onClick={onAsk}
+                title={`Ask ${plantName} to explain this chart`}
+              >
+                <MessageCircle /> Ask {plantName}
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full text-[13px]"
+              onClick={() => setTable((t) => !t)}
+              aria-pressed={table}
+            >
+              {table ? "Show chart" : "Show table"}
+            </Button>
+          </div>
         )
       }
     >

@@ -1,9 +1,15 @@
 import { postLines } from "../api";
 
 const HISTORY_TURNS = 20;
+const CHECK_IN_TURN = "(Routine check while nobody was around. Leave a note for the kids.)";
+
+// A chart the kid asked about rides along under the question (see Analytics). The marker lets the saved
+// prompt be split back into the question and the chart when the chat history loads.
+export const CHART_MARKER = "\n\n[The chart the kid is looking at]\n";
 
 const textOf = (message) =>
-  message.parts.filter((p) => p.type === "text").map((p) => p.text).join("");
+  message.parts.filter((p) => p.type === "text").map((p) => p.text).join("") +
+  (message.metadata?.chart ? CHART_MARKER + message.metadata.chart : "");
 
 /**
  * A Vercel AI SDK ChatTransport for our FastAPI backend.
@@ -21,9 +27,14 @@ export class PlantChatTransport {
     const last = messages[messages.length - 1];
     const history = messages
       .slice(0, -1)
-      .filter((m) => !m.metadata?.checkIn) // check-ins weren't part of the conversation
+      // A check-in's note often ends with a question the kid may now be answering, so the plant needs it.
+      // It goes in with a stand-in user turn, which keeps the turns alternating user/model.
+      .flatMap((m) =>
+        m.metadata?.checkIn
+          ? [{ role: "user", text: CHECK_IN_TURN }, { role: "model", text: textOf(m) }]
+          : [{ role: m.role === "user" ? "user" : "model", text: textOf(m) }]
+      )
       .slice(-HISTORY_TURNS)
-      .map((m) => ({ role: m.role === "user" ? "user" : "model", text: textOf(m) }))
       .filter((m) => m.text);
 
     const events = postLines(

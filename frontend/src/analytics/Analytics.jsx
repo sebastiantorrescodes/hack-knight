@@ -5,6 +5,8 @@ import usePoll from "../usePoll";
 import ChartCard, { Empty, GlassCard } from "./ChartCard";
 import { HumidityChart, LeafChart, LightChart, SoilChart, TempChart } from "./charts";
 import { RANGES, fillBuckets, formatNumber, formatTime, inRange, timeAgo } from "./ranges";
+import { chartContext } from "./chartContext";
+import { BRIGHT_LIMIT, DARK_LIMIT, DRY_LIMIT, WET_LIMIT } from "../plant";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -61,8 +63,9 @@ function activityRows(runs, events, commands) {
   return rows.sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 15);
 }
 
-export default function Analytics() {
-  const { api } = usePlant();
+/** The Garden data tab. `onAsk(question, context)` sends a chart to the chat for the plant to explain. */
+export default function Analytics({ onAsk }) {
+  const { api, plant } = usePlant();
   const [range, setRange] = useState(RANGES[1]);
   const fetchHistory = useCallback(() => api.getHistory(range.hours, range.bucket), [api, range]);
 
@@ -91,6 +94,11 @@ export default function Analytics() {
   const soilTrend = withData.length > 1 ? withData[withData.length - 1].soil - withData[0].soil : null;
   const activity = activityRows(runs, events, commands);
   const timeCol = { key: "t", label: "Time", format: (t) => formatTime(t) };
+
+  // "Ask the plant about this chart": a kid-friendly question, plus the chart as text for the plant to read
+  const ask = (title, chart) =>
+    onAsk && (() => onAsk(`${plant.name}, what happened in my ${title.toLowerCase()} chart?`, chartContext({ title, range, ...chart })));
+  const askProps = (title, chart) => ({ plantName: plant.name, onAsk: ask(title, chart) });
 
   return (
     <div className="flex flex-col gap-5">
@@ -153,6 +161,10 @@ export default function Analytics() {
       <div className="grid gap-5 lg:grid-cols-2">
         <ChartCard
           title="Soil moisture"
+          {...askProps("Soil moisture", {
+            rows: withData, key: "soil", waterings,
+            meaning: `How wet the soil is, 0-1023, higher is wetter: below ${DRY_LIMIT} is dry (thirsty), above ${WET_LIMIT} is too wet.`,
+          })}
           subtitle={`Average per ${range.bucket} bucket, shaded band is min–max · 💧 = watering`}
           rows={withData}
           dimmed={history.loading && !!history.data}
@@ -169,6 +181,10 @@ export default function Analytics() {
 
         <ChartCard
           title="Light"
+          {...askProps("Light", {
+            rows: withData, key: "light",
+            meaning: `How bright it is around the plant, 0-1023: below ${DARK_LIMIT} is dark, above ${BRIGHT_LIMIT} is bright.`,
+          })}
           subtitle={`Average per ${range.bucket} bucket (relative, 0–1023)`}
           rows={withData}
           dimmed={history.loading && !!history.data}
@@ -180,6 +196,10 @@ export default function Analytics() {
 
         <ChartCard
           title="Temperature"
+          {...askProps("Temperature", {
+            rows: withData, key: "temp", unit: "°C", digits: 1,
+            meaning: "The air temperature next to the plant. Most houseplants like 15-28°C.",
+          })}
           subtitle={`Average per ${range.bucket} bucket, shaded band is min–max`}
           rows={withData}
           dimmed={history.loading && !!history.data}
@@ -195,6 +215,10 @@ export default function Analytics() {
 
         <ChartCard
           title="Humidity"
+          {...askProps("Humidity", {
+            rows: withData, key: "humidity", unit: "%",
+            meaning: "How much water is in the air around the plant. Most houseplants like 40-60%.",
+          })}
           subtitle={`Average per ${range.bucket} bucket, shaded band is min–max`}
           rows={withData}
           dimmed={history.loading && !!history.data}
@@ -210,6 +234,10 @@ export default function Analytics() {
 
         <ChartCard
           title="Leafiness"
+          {...askProps("Leafiness", {
+            rows: leafPoints, key: "green", unit: "%", digits: 1,
+            meaning: "How much of each hourly camera photo looks like green leaves: more green means more leaves showing, or healthier ones.",
+          })}
           subtitle="Share of each photo that looks like green leaves"
           rows={leafPoints}
           empty="No photos in this range yet (the Pi takes one every hour)"
