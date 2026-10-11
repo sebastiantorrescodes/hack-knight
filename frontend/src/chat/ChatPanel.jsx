@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
-import { ArrowUp, Square, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowUp, Mic, MicOff, Square, Volume2, VolumeX, X } from "lucide-react";
 import { signedUrl } from "../api";
 import { PlantChatTransport } from "./transport";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,52 @@ async function speak(text) {
   audio.play().catch(() => {}); // no voice configured or autoplay blocked: the text is still on screen
 }
 
+/** Hook that wires up the browser's SpeechRecognition API. */
+function useSpeech({ onResult, onSend }) {
+  const [listening, setListening] = useState(false);
+  const recRef = useRef(null);
+
+  const supported = typeof window !== "undefined" &&
+    !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  const start = useCallback(() => {
+    if (!supported || listening) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    recRef.current = rec;
+
+    rec.onstart = () => setListening(true);
+    rec.onend = () => {
+      setListening(false);
+      recRef.current = null;
+    };
+    rec.onerror = () => {
+      setListening(false);
+      recRef.current = null;
+    };
+    rec.onresult = (e) => {
+      const transcript = Array.from(e.results)
+        .map((r) => r[0].transcript)
+        .join("");
+      onResult(transcript);
+      if (e.results[e.results.length - 1].isFinal) {
+        onSend(transcript);
+        rec.stop();
+      }
+    };
+    rec.start();
+  }, [supported, listening, onResult, onSend]);
+
+  const stop = useCallback(() => {
+    recRef.current?.stop();
+  }, []);
+
+  return { listening, supported, start, stop };
+}
+
 export default function ChatPanel({ plantId, name, onClose }) {
   const transport = useMemo(() => new PlantChatTransport(plantId), [plantId]);
   const [voice, setVoice] = useState(true);
@@ -86,12 +132,17 @@ export default function ChatPanel({ plantId, name, onClose }) {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, status]);
 
-  const send = (text) => {
+  const send = useCallback((text) => {
     const t = text.trim();
     if (!t || busy) return;
     sendMessage({ text: t });
     setInput("");
-  };
+  }, [busy, sendMessage]);
+
+  const { listening, supported: micSupported, start: startMic, stop: stopMic } = useSpeech({
+    onResult: (transcript) => setInput(transcript),
+    onSend: (transcript) => send(transcript),
+  });
 
   return (
     <aside
@@ -194,11 +245,25 @@ export default function ChatPanel({ plantId, name, onClose }) {
           send(input);
         }}
       >
+        {micSupported && (
+          <Button
+            type="button"
+            size="icon"
+            variant={listening ? "destructive" : "ghost"}
+            className={cn("shrink-0 rounded-full transition-all", listening && "animate-pulse")}
+            onClick={listening ? stopMic : startMic}
+            disabled={busy}
+            aria-label={listening ? "Stop listening" : "Speak to plant"}
+            title={listening ? "Stop listening" : "Speak to plant"}
+          >
+            {listening ? <MicOff className="size-5" /> : <Mic className="size-5" />}
+          </Button>
+        )}
         <div className="flex flex-1 items-center rounded-full border bg-background/60 py-1 pr-1 pl-4 focus-within:ring-2 focus-within:ring-ring/40">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={`Message ${name}`}
+            placeholder={listening ? "Listening…" : `Message ${name}`}
             aria-label="Message"
             maxLength={2000}
             className="min-w-0 flex-1 bg-transparent py-1.5 text-[15px] outline-none placeholder:text-muted-foreground"
