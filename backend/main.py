@@ -418,6 +418,62 @@ def get_agent_events(
     return db.list_events(plant_id, kind, limit)
 
 
+# ElevenLabs voice agent (speech to speech). The browser talks to ElevenLabs directly; the backend hands out
+# a short-lived conversation token (so the API key stays here) and runs the agent's tools when ElevenLabs calls.
+
+ELEVENLABS_TOKEN_URL = "https://api.elevenlabs.io/v1/convai/conversation/token"
+
+
+@app.get("/voice/session")
+def voice_session(plant: dict = Depends(owned_plant)):
+    """Start a voice call: a conversation token for the ElevenLabs SDK plus the prompt's dynamic variables."""
+    if not settings.ELEVENLABS_API_KEY or not settings.ELEVENLABS_AGENT_ID:
+        raise HTTPException(503, "Set ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the server (backend/.env)")
+    try:
+        resp = httpx.get(
+            ELEVENLABS_TOKEN_URL,
+            params={"agent_id": settings.ELEVENLABS_AGENT_ID},
+            headers={"xi-api-key": settings.ELEVENLABS_API_KEY},
+            timeout=10,
+        )
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Can't reach ElevenLabs: {e}")
+    if resp.status_code != 200:
+        log.warning("voice   token request failed: %s %s", resp.status_code, resp.text[:200])
+        raise HTTPException(502, f"ElevenLabs refused the conversation token ({resp.status_code})")
+    log.info("voice   %s: call started", plant["id"])
+    return {
+        "agent_id": settings.ELEVENLABS_AGENT_ID,
+        "conversation_token": resp.json()["token"],
+        "dynamic_variables": agent.voice_variables(plant["id"]),
+    }
+
+
+@app.post("/voice/tools/{name}")
+async def voice_tool(
+    name: str,
+    request: Request,
+    plant_id: str = Query(pattern=PLANT_ID),
+    x_voice_secret: str = Header(default=""),
+):
+    """Called by ElevenLabs when the voice agent uses a tool. The JSON body holds the tool's arguments.
+    If VOICE_TOOL_SECRET is set, requests must send it as X-Voice-Secret."""
+    if settings.VOICE_TOOL_SECRET and not secrets.compare_digest(
+        x_voice_secret.encode(), settings.VOICE_TOOL_SECRET.encode()
+    ):
+        raise HTTPException(401, "Invalid voice tool secret")
+    if name not in agent.VOICE_TOOLS:
+        raise HTTPException(404, f"Unknown tool {name!r}")
+    check_owner(plant_id, None)  # plants are shared; this only checks the plant exists
+    try:
+        args = await request.json() if await request.body() else {}
+    except ValueError:
+        raise HTTPException(400, "Body must be JSON")
+    if not isinstance(args, dict):
+        raise HTTPException(400, "Body must be a JSON object")
+    return await asyncio.to_thread(agent.call_voice_tool, plant_id, name, args)
+
+
 # People and their plants
 
 @app.get("/me")

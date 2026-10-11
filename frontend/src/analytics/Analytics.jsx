@@ -41,8 +41,8 @@ function activityRows(runs, events, commands) {
   const rows = [
     ...(runs || []).map((r) => ({
       ts: r.ts,
-      kind: r.trigger === "check" ? "AI check" : "AI chat",
-      text: r.error ? `Error: ${r.error}` : r.reply,
+      kind: { check: "AI check", voice: "Voice call" }[r.trigger] ?? "AI chat",
+      text: r.error ? `Error: ${r.error}` : r.reply ?? r.prompt,
       extra: r.actions.length ? `Tools: ${r.actions.map((a) => a.tool).join(", ")}` : "",
     })),
     ...(events || []).map((e) => ({

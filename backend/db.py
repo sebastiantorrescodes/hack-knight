@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     plant_id TEXT NOT NULL,
     ts       TEXT NOT NULL,
-    trigger  TEXT NOT NULL,              -- 'chat' or 'check'
+    trigger  TEXT NOT NULL,              -- 'chat', 'check' or 'voice'
     prompt   TEXT,
     reply    TEXT,
     actions  TEXT NOT NULL DEFAULT '[]', -- tool calls the agent made, JSON

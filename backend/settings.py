@@ -40,6 +40,8 @@ STALE_READING_MINUTES = int(os.getenv("STALE_READING_MINUTES", 30))
 # Plant voice (ElevenLabs). Pick a voice in the ElevenLabs Voice Library and copy its voice ID.
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "")
+ELEVENLABS_AGENT_ID = os.getenv("ELEVENLABS_AGENT_ID", "")
+VOICE_TOOL_SECRET = os.getenv("VOICE_TOOL_SECRET", "")  # ElevenLabs sends it as X-Voice-Secret on tool webhooks
 ELEVENLABS_MODEL = os.getenv("ELEVENLABS_MODEL", "eleven_flash_v2_5")  # lowest-latency model
 TTS_MAX_CHARS = int(os.getenv("TTS_MAX_CHARS", 600))
 TTS_CACHE_DIR = Path(os.getenv("TTS_CACHE_DIR", BASE_DIR / "data" / "tts"))

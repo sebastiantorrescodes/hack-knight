@@ -419,3 +419,31 @@ def run(plant_id, message, trigger="chat", history=None):
 def check(plant_id):
     """Scheduled check: the agent looks at everything and acts on its own."""
     return run(plant_id, CHECK_PROMPT, trigger="check")
+
+
+# ElevenLabs voice agent. ElevenLabs runs the conversation (its own LLM and prompt); these give it the same
+# snapshot and tools the Gemini agent uses, so typed and spoken chat see and do the same things.
+
+# send_alert and record_skipped_watering are for routine checks, not conversations
+VOICE_TOOLS = {"get_plant_status", "get_reading_history", "get_weather_forecast", "look_at_plant", "take_photo", "water_plant"}
+
+
+def voice_variables(plant_id):
+    """Dynamic variables for the voice agent's prompt ({{plant_name}}, {{audience}}, {{snapshot}}, {{plant_id}})."""
+    profile = accounts.agent_profile(plant_id) if settings.TIGER_DATABASE_URL else None
+    return {
+        "plant_id": plant_id,
+        "plant_name": (profile and profile["name"]) or "Sprout",
+        "audience": (profile and KIDS_AGES.get(profile["kids_ages"])) or KIDS_AGES["6-8"],
+        "snapshot": snapshot(plant_id, profile),
+    }
+
+
+def call_voice_tool(plant_id, name, args):
+    """Run one tool for the voice agent and record it as a 'voice' agent run, like chat tool calls."""
+    profile = accounts.agent_profile(plant_id) if settings.TIGER_DATABASE_URL else None
+    tools_by_name = {fn.__name__: fn for fn in build_tools(plant_id, profile) if fn.__name__ in VOICE_TOOLS}
+    result = _call_tool(tools_by_name, name, args)
+    log.info("%s: voice tool %s(%s) -> %s", plant_id, name, args, str(result)[:120])
+    db.insert_agent_run(plant_id, "voice", f"(voice call) {name}", None, [{"tool": name, "args": args, "result": result}])
+    return result
