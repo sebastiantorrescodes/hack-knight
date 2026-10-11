@@ -1,5 +1,5 @@
-import { ChevronRight, Droplet, Leaf, Sun as SunIcon } from "lucide-react";
-import { DRY_LIMIT, LEAFY_FULL, LIGHT_FULL, SOIL_FULL, WET_LIMIT, clamp01, sunLabel, waterLabel } from "../plant";
+import { ChevronRight, Droplet, Droplets, Leaf, Sun as SunIcon, Thermometer } from "lucide-react";
+import { DRY_LIMIT, LEAFY_FULL, LIGHT_FULL, SOIL_FULL, WET_LIMIT, clamp01, humidityLabel, sunLabel, tempLabel, waterLabel } from "../plant";
 import { cn } from "@/lib/utils";
 
 function WaterCup({ soil }) {
@@ -63,6 +63,77 @@ function Leaves({ greenPct }) {
   );
 }
 
+/** Thermometer gauge: bulb + tube fill from 0°C (bottom) to 50°C (top). */
+function TempGauge({ temp }) {
+  const raw = temp != null && temp !== "ERR" ? parseFloat(temp) : null;
+  const fill = raw == null ? 0 : clamp01(raw / 50);
+  const tubeTop = 20, tubeBtm = 88, tubeH = tubeBtm - tubeTop;
+  const fillY = tubeBtm - fill * tubeH;
+  return (
+    <svg viewBox="0 0 100 120" className="h-28 w-24" aria-hidden="true">
+      <defs>
+        <linearGradient id="therm-fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="#ff9f0a" />
+          <stop offset="1" stopColor="#ff3b30" />
+        </linearGradient>
+        <clipPath id="therm-clip">
+          <rect x="40" y={tubeTop} width="20" height={tubeH} rx="10" />
+        </clipPath>
+      </defs>
+      {/* tube background */}
+      <rect x="40" y={tubeTop} width="20" height={tubeH} rx="10" fill="currentColor" opacity="0.1" />
+      {/* fill */}
+      <rect x="40" y={fillY} width="20" height={tubeBtm - fillY} rx="10" fill="url(#therm-fill)" clipPath="url(#therm-clip)" />
+      {/* bulb */}
+      <circle cx="50" cy="98" r="12" fill="url(#therm-fill)" />
+      {/* outline */}
+      <rect x="40" y={tubeTop} width="20" height={tubeH} rx="10" fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="2" />
+      {/* tick marks */}
+      {[0.25, 0.5, 0.75].map((t) => (
+        <line key={t} x1="60" x2="67" y1={tubeBtm - t * tubeH} y2={tubeBtm - t * tubeH}
+          stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.5" />
+      ))}
+      {raw != null && (
+        <text x="50" y="15" textAnchor="middle" fontSize="11" fill="currentColor" opacity="0.7" fontWeight="600">
+          {raw.toFixed(1)}°C
+        </text>
+      )}
+    </svg>
+  );
+}
+
+/** Droplet gauge: water drop that fills based on humidity 0–100 %. */
+function HumidityGauge({ humidity }) {
+  const raw = humidity != null && humidity !== "ERR" ? parseFloat(humidity) : null;
+  const fill = raw == null ? 0 : clamp01(raw / 100);
+  // The drop clip path
+  const dropPath = "M50 15 C50 15 22 52 22 70 A28 28 0 0 0 78 70 C78 52 50 15 50 15 Z";
+  return (
+    <svg viewBox="0 0 100 120" className="h-28 w-24" aria-hidden="true">
+      <defs>
+        <linearGradient id="hum-fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="#5ac8fa" />
+          <stop offset="1" stopColor="var(--ios-blue)" />
+        </linearGradient>
+        <clipPath id="drop-clip">
+          <path d={dropPath} />
+        </clipPath>
+      </defs>
+      {/* drop background */}
+      <path d={dropPath} fill="currentColor" opacity="0.1" />
+      {/* fill — clip to drop shape */}
+      <rect x="22" y={98 - fill * 76} width="56" height={fill * 76} fill="url(#hum-fill)" clipPath="url(#drop-clip)" />
+      {/* outline */}
+      <path d={dropPath} fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="2.5" />
+      {raw != null && (
+        <text x="50" y="75" textAnchor="middle" fontSize="14" fill="white" fontWeight="700">
+          {Math.round(raw)}%
+        </text>
+      )}
+    </svg>
+  );
+}
+
 function Meter({ title, icon: Icon, iconClass, label, onClick, children }) {
   return (
     <button
@@ -84,17 +155,23 @@ function Meter({ title, icon: Icon, iconClass, label, onClick, children }) {
   );
 }
 
-/** The three kid-friendly gauges. Tapping one asks the plant to explain it. */
+/** The five kid-friendly gauges. Tapping one asks the plant to explain it. */
 export default function Meters({ status, onExplain }) {
   const r = status?.latest_reading;
   const photo = status?.latest_photo;
   return (
-    <section className="grid gap-5 sm:grid-cols-3">
+    <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       <Meter title="Water" icon={Droplet} iconClass="bg-ios-blue" label={waterLabel(r)} onClick={() => onExplain("water")}>
         <WaterCup soil={r?.soil} />
       </Meter>
       <Meter title="Sunshine" icon={SunIcon} iconClass="bg-ios-orange" label={sunLabel(r)} onClick={() => onExplain("sun")}>
         <Sun light={r?.light} />
+      </Meter>
+      <Meter title="Temperature" icon={Thermometer} iconClass="bg-ios-red" label={tempLabel(r)} onClick={() => onExplain("temp")}>
+        <TempGauge temp={r?.temp} />
+      </Meter>
+      <Meter title="Humidity" icon={Droplets} iconClass="bg-ios-teal" label={humidityLabel(r)} onClick={() => onExplain("humidity")}>
+        <HumidityGauge humidity={r?.humidity} />
       </Meter>
       <Meter
         title="Leafiness"
