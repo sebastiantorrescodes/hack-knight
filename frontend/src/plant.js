@@ -44,9 +44,47 @@ export function explain(meter, status) {
       : "It's dark, so I'm resting.";
     return `I make my own food from sunlight. That's called photosynthesis! ${now}`;
   }
+  if (meter === "temp") {
+    const t = r?.temp != null && r.temp !== "ERR" ? parseFloat(r.temp) : null;
+    const now =
+      t == null ? "I can't read the temperature right now."
+      : t < 10 ? `It's ${t.toFixed(1)}°C — pretty chilly for me!`
+      : t < 28 ? `It's ${t.toFixed(1)}°C — that feels nice and cosy.`
+      : `It's ${t.toFixed(1)}°C — a bit hot for me!`;
+    return `Plants grow best between 15–28°C. ${now}`;
+  }
+  if (meter === "humidity") {
+    const h = r?.humidity != null && r.humidity !== "ERR" ? parseFloat(r.humidity) : null;
+    const now =
+      h == null ? "I can't read the humidity right now."
+      : h < 30 ? `It's ${Math.round(h)}% — the air is pretty dry.`
+      : h < 60 ? `It's ${Math.round(h)}% — perfect moisture for me!`
+      : `It's ${Math.round(h)}% — the air is very humid.`;
+    return `Humidity is how much water is in the air. I like it between 40–60%. ${now}`;
+  }
   return "My leaves are green because of chlorophyll. It catches sunlight like a tiny solar panel!";
 }
 
 export const waterLabel = (r) => (!r ? "?" : r.status === "DRY" ? "Thirsty" : r.status === "WET" ? "Too much" : "Just right");
 export const sunLabel = (r) => (!r ? "?" : r.light_status === "BRIGHT" ? "Super sunny" : r.light_status === "DIM" ? "A little light" : "Dark");
 export const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
+export const tempLabel = (r) => {
+  if (!r || r.temp == null || r.temp === "ERR") return "?";
+  const t = parseFloat(r.temp);
+  if (isNaN(t)) return "?";
+  if (t < 10) return `${t.toFixed(1)}°C — Chilly`;
+  if (t < 18) return `${t.toFixed(1)}°C — Cool`;
+  if (t < 28) return `${t.toFixed(1)}°C — Comfy`;
+  if (t < 35) return `${t.toFixed(1)}°C — Warm`;
+  return `${t.toFixed(1)}°C — Hot!`;
+};
+
+export const humidityLabel = (r) => {
+  if (!r || r.humidity == null || r.humidity === "ERR") return "?";
+  const h = parseFloat(r.humidity);
+  if (isNaN(h)) return "?";
+  if (h < 30) return `${Math.round(h)}% — Dry air`;
+  if (h < 60) return `${Math.round(h)}% — Just right`;
+  return `${Math.round(h)}% — Humid`;
+};
