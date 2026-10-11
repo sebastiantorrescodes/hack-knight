@@ -10,7 +10,7 @@ const CALL_VOLUME_GAIN = 2.5; // getOutputVolume() stays well under 1 for normal
  * Transcribed turns and tool calls arrive through onTurn:
  *   { kind: "text", role: "user" | "agent", text }  or  { kind: "tool", name, failed }
  */
-export function useVoiceCall({ plantId, onTurn }) {
+export function useVoiceCall({ plantId, onTurn, silent = false }) {
   const [error, setError] = useState(null);
   const [starting, setStarting] = useState(false);
 
@@ -48,9 +48,16 @@ export function useVoiceCall({ plantId, onTurn }) {
   const outputVolume = useRef(conversation.getOutputVolume);
   outputVolume.current = conversation.getOutputVolume;
   useEffect(() => {
-    if (status !== "connected") return;
+    if (status !== "connected" || silent) return;
     return setVoiceSource(() => outputVolume.current() * CALL_VOLUME_GAIN);
-  }, [status]);
+  }, [status, silent]);
+
+  // The chat's sound toggle mutes the plant's side of the call (the kid's mic is muted separately)
+  const setVolume = useRef(conversation.setVolume);
+  setVolume.current = conversation.setVolume;
+  useEffect(() => {
+    if (status === "connected") setVolume.current({ volume: silent ? 0 : 1 });
+  }, [status, silent]);
 
   return {
     start,

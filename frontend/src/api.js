@@ -2,7 +2,12 @@ import { getToken } from "@clerk/react";
 
 export const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
-async function request(path, { method = "GET", body, signal } = {}) {
+async function request(path, options) {
+  return (await send(path, options)).json();
+}
+
+/** fetch with the sign-in token; throws the backend's error message when the response isn't ok. */
+async function send(path, { method = "GET", body, signal } = {}) {
   const token = await getToken();
   const res = await fetch(`${API_URL}${path}`, {
     method,
@@ -18,11 +23,27 @@ async function request(path, { method = "GET", body, signal } = {}) {
     const message = typeof detail === "string" ? detail : `${path.split("?")[0]} returned ${res.status}`;
     throw Object.assign(new Error(message), { status: res.status });
   }
-  return res.json();
+  return res;
 }
 
 const get = (path) => request(path);
 export const post = (path, body, signal) => request(path, { method: "POST", body, signal });
+
+/** POST, then yield each line of a newline-delimited JSON response as soon as it arrives. */
+export async function* postLines(path, body, signal) {
+  const res = await send(path, { method: "POST", body, signal });
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for (const line of lines) if (line.trim()) yield JSON.parse(line);
+  }
+  if (buffer.trim()) yield JSON.parse(buffer);
+}
 
 /** A URL for <img>/<audio>, which can't send headers: the short-lived session token goes in the query. */
 export async function signedUrl(path) {

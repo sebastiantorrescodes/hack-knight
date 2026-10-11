@@ -8,6 +8,7 @@ Dashboard reads and /agent/chat need a Clerk sign-in (see auth.py), and only wor
 user has claimed (POST /plants). The agent's watering limits live in agent.py.
 """
 import asyncio
+import json
 import logging
 import secrets
 import time
@@ -396,6 +397,26 @@ def agent_chat(chat: ChatIn, user_id: str = Depends(auth.current_user)):
     check_owner(chat.plant_id, user_id)
     history = [turn.model_dump() for turn in chat.history]
     return run_agent(agent.run, chat.plant_id, chat.message, trigger="chat", history=history)
+
+
+@app.post("/agent/chat/stream")
+def agent_chat_stream(chat: ChatIn, user_id: str = Depends(auth.current_user)):
+    """Same as /agent/chat, but streams the reply and tool calls as they happen: one JSON event per line
+    (see agent.run_stream), ending with {"type": "done"} or {"type": "error", "message": ...}."""
+    check_owner(chat.plant_id, user_id)
+    history = [turn.model_dump() for turn in chat.history]
+
+    def events():
+        try:
+            for event in agent.run_stream(chat.plant_id, chat.message, trigger="chat", history=history):
+                yield json.dumps(event, default=str) + "\n"
+        except agent.AgentError as e:
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    # X-Accel-Buffering stops proxies like nginx from holding the stream back until it ends
+    return StreamingResponse(
+        events(), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
 
 
 @app.post("/agent/check", dependencies=[Depends(require_key)])

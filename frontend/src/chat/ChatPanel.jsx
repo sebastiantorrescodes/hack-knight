@@ -63,10 +63,21 @@ function ToolChip({ part }) {
   );
 }
 
-async function speak(text) {
+let currentAudio = null; // the reply being read aloud, so the sound toggle can cut it off
+
+function stopSpeaking() {
+  currentAudio?.pause();
+  currentAudio = null;
+}
+
+async function speak(text, stillWanted) {
+  stopSpeaking(); // a new reply replaces the old one instead of talking over it
   const audio = new Audio();
+  currentAudio = audio;
   audio.crossOrigin = "anonymous"; // lets playWithVoice read the loudness for the plant's mouth
   audio.src = await signedUrl(`/tts?${new URLSearchParams({ text: text.slice(0, 600) })}`);
+  // Sound was switched off (or a newer reply started) while the audio URL was loading
+  if (currentAudio !== audio || !stillWanted()) return;
   playWithVoice(audio).catch(() => {}); // no voice configured or autoplay blocked: the text is still on screen
 }
 
@@ -162,9 +173,14 @@ function ChatPanelBody({ plantId, name, onClose }) {
     transport,
     onFinish: ({ message }) => {
       const text = message.parts.filter((p) => p.type === "text").map((p) => p.text).join("");
-      if (voiceRef.current && text) speak(text).catch(() => {});
+      if (voiceRef.current && text) speak(text, () => voiceRef.current).catch(() => {});
     },
   });
+
+  useEffect(() => {
+    if (!voice) stopSpeaking();
+  }, [voice]);
+  useEffect(() => stopSpeaking, []); // closing the chat stops the plant mid-sentence
   const [input, setInput] = useState("");
   const endRef = useRef(null);
   const busy = status === "submitted" || status === "streaming";
@@ -176,7 +192,7 @@ function ChatPanelBody({ plantId, name, onClose }) {
   // Live call transcript, shown after the typed chat
   const [voiceTurns, setVoiceTurns] = useState([]);
   const addTurn = useCallback((turn) => setVoiceTurns((turns) => [...turns, { id: turns.length, ...turn }]), []);
-  const call = useVoiceCall({ plantId, onTurn: addTurn });
+  const call = useVoiceCall({ plantId, onTurn: addTurn, silent: !voice });
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });

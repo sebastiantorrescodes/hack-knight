@@ -1,23 +1,16 @@
-import { post } from "../api";
+import { postLines } from "../api";
 
 const HISTORY_TURNS = 20;
-const WORD_DELAY_MS = 18; // the reply is typed out word by word
 
 const textOf = (message) =>
   message.parts.filter((p) => p.type === "text").map((p) => p.text).join("");
 
-const sleep = (ms, signal) =>
-  new Promise((resolve) => {
-    const id = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => (clearTimeout(id), resolve()), { once: true });
-  });
-
 /**
  * A Vercel AI SDK ChatTransport for our FastAPI backend.
  *
- * /agent/chat runs the whole Gemini tool loop on the server and returns
- * { reply, actions: [{ tool, args, result }] } as JSON. This turns that into the UI message chunks useChat
- * expects: one dynamic tool part per action the agent took, then the reply text.
+ * /agent/chat/stream runs the Gemini tool loop on the server and streams one JSON event per line as it goes
+ * (text deltas, tool calls and their results; see agent.run_stream). This turns those into the UI message
+ * chunks useChat expects: a dynamic tool part per tool call, and text parts for what the plant says.
  */
 export class PlantChatTransport {
   constructor(plantId) {
@@ -32,38 +25,60 @@ export class PlantChatTransport {
       .map((m) => ({ role: m.role === "user" ? "user" : "model", text: textOf(m) }))
       .filter((m) => m.text);
 
-    const run = await post("/agent/chat", { plant_id: this.plantId, message: textOf(last), history }, abortSignal);
+    const events = postLines(
+      "/agent/chat/stream",
+      { plant_id: this.plantId, message: textOf(last), history },
+      abortSignal,
+    );
+    const runId = crypto.randomUUID();
 
     return new ReadableStream({
       async start(controller) {
         const send = (chunk) => controller.enqueue(chunk);
-        send({ type: "start" });
+        let textId = null; // the text part being streamed into, if any
+        let texts = 0;
 
-        (run.actions || []).forEach((action, i) => {
-          const toolCallId = `${run.id}-${i}`;
-          send({ type: "start-step" });
-          send({ type: "tool-input-available", toolCallId, toolName: action.tool, input: action.args, dynamic: true });
-          send({ type: "tool-output-available", toolCallId, output: action.result, dynamic: true });
+        // Text before and after a tool call goes in separate parts, so the tool chip sits between them
+        const endText = () => {
+          if (!textId) return;
+          send({ type: "text-end", id: textId });
           send({ type: "finish-step" });
-        });
+          textId = null;
+        };
 
-        const id = `${run.id}-text`;
-        send({ type: "start-step" });
-        send({ type: "text-start", id });
-        for (const word of (run.reply || "").split(/(?<=\s)/)) {
-          if (abortSignal?.aborted) break;
-          send({ type: "text-delta", id, delta: word });
-          await sleep(WORD_DELAY_MS, abortSignal);
+        send({ type: "start" });
+        try {
+          for await (const event of events) {
+            if (event.type === "text") {
+              if (!textId) {
+                textId = `${runId}-text-${texts++}`;
+                send({ type: "start-step" });
+                send({ type: "text-start", id: textId });
+              }
+              send({ type: "text-delta", id: textId, delta: event.delta });
+            } else if (event.type === "tool_call") {
+              endText();
+              const toolCallId = `${runId}-${event.id}`;
+              send({ type: "start-step" });
+              send({ type: "tool-input-available", toolCallId, toolName: event.tool, input: event.args, dynamic: true });
+            } else if (event.type === "tool_result") {
+              send({ type: "tool-output-available", toolCallId: `${runId}-${event.id}`, output: event.result, dynamic: true });
+              send({ type: "finish-step" });
+            } else if (event.type === "error") {
+              throw new Error(event.message);
+            }
+          }
+          endText();
+          send({ type: "finish" });
+        } catch (err) {
+          if (!abortSignal?.aborted) send({ type: "error", errorText: err.message });
         }
-        send({ type: "text-end", id });
-        send({ type: "finish-step" });
-        send({ type: "finish" });
         controller.close();
       },
     });
   }
 
   async reconnectToStream() {
-    return null; // replies aren't resumable; each request returns the whole answer
+    return null; // replies aren't resumable
   }
 }

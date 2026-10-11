@@ -369,6 +369,21 @@ def run(plant_id, message, trigger="chat", history=None):
 
     Returns the stored agent run: {id, ts, reply, actions: [{tool, args, result}], ...}.
     """
+    for event in run_stream(plant_id, message, trigger, history):
+        if event["type"] == "done":
+            return event["run"]
+
+
+def run_stream(plant_id, message, trigger="chat", history=None):
+    """Like run(), but yields what happens as it happens, for the chat to show live:
+
+      {"type": "text", "delta": "..."}                        part of the plant's reply
+      {"type": "tool_call", "id": n, "tool": ..., "args": ...}  a tool is starting
+      {"type": "tool_result", "id": n, "result": ...}          ...and what it returned
+      {"type": "done", "run": {...}}                           the stored agent run, last
+
+    Raises AgentError if Gemini fails.
+    """
     profile = accounts.agent_profile(plant_id) if settings.TIGER_DATABASE_URL else None
     tools = build_tools(plant_id, profile)
     tools_by_name = {fn.__name__: fn for fn in tools}
@@ -385,35 +400,49 @@ def run(plant_id, message, trigger="chat", history=None):
     log.info("%s: %s %r", plant_id, trigger, message[:80])
 
     actions = []
-    reply = None
+    texts = []  # the reply, one entry per step that said something
     try:
         for _ in range(settings.AGENT_MAX_STEPS):
-            response = client().models.generate_content(
+            model_parts, calls, text = [], [], ""
+            for chunk in client().models.generate_content_stream(
                 model=settings.GEMINI_MODEL, contents=contents, config=config
-            )
-            calls = response.function_calls
+            ):
+                content = chunk.candidates[0].content if chunk.candidates else None
+                for part in (content.parts if content and content.parts else []):
+                    model_parts.append(part)
+                    if part.function_call:
+                        calls.append(part.function_call)
+                    elif part.text and not part.thought:
+                        text += part.text
+                        yield {"type": "text", "delta": part.text}
+            if text.strip():
+                texts.append(text.strip())
             if not calls:
-                reply = response.text or ""
                 break
             # Send the model's turn back unchanged; it carries the thought signatures Gemini needs
-            contents.append(response.candidates[0].content)
+            contents.append(types.Content(role="model", parts=model_parts))
             parts = []
             for call in calls:
                 args = dict(call.args or {})
+                yield {"type": "tool_call", "id": len(actions), "tool": call.name, "args": args}
                 result = _call_tool(tools_by_name, call.name, args)
                 log.info("%s: tool %s(%s) -> %s", plant_id, call.name, args, str(result)[:120])
+                yield {"type": "tool_result", "id": len(actions), "result": result}
                 actions.append({"tool": call.name, "args": args, "result": result})
                 parts.append(types.Part.from_function_response(name=call.name, response=result))
             # The Gemini API only accepts "user" or "model"; function results go back as a user turn
             contents.append(types.Content(role="user", parts=parts))
         else:
-            reply = "I ran out of steps before finishing. Try asking something more specific."
+            out_of_steps = "I ran out of steps before finishing. Try asking something more specific."
+            texts.append(out_of_steps)
+            yield {"type": "text", "delta": out_of_steps}
     except genai_errors.APIError as e:
         db.insert_agent_run(plant_id, trigger, message, None, actions, error=str(e))
         raise AgentError(f"Gemini API error: {e}") from e
 
+    reply = "\n\n".join(texts)
     log.info("%s: reply %r", plant_id, reply)
-    return db.insert_agent_run(plant_id, trigger, message, reply, actions)
+    yield {"type": "done", "run": db.insert_agent_run(plant_id, trigger, message, reply, actions)}
 
 
 def check(plant_id):
