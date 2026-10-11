@@ -37,7 +37,7 @@ def upload_readings(api):
         body = {
             "plant_id": config.PLANT_ID,
             "readings": [
-                {k: r[k] for k in ("id", "ts", "soil", "light", "status", "light_status")} for r in rows
+                {k: r[k] for k in ("id", "ts", "soil", "light", "status", "light_status", "temp", "humidity")} for r in rows
             ],
         }
         result = api.request("POST", "/readings", json=body)

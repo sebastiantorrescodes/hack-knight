@@ -17,10 +17,18 @@ log = logging.getLogger("reader")
 
 
 def parse_line(line):
-    """Return {'soil': int, 'light': int} or None if the line is malformed."""
+    """Return {'soil': int, 'light': int, 'temp': float|None, 'humidity': float|None}
+    or None if the line is malformed."""
     try:
         fields = dict(part.split("=", 1) for part in line.strip().split(","))
-        return {"soil": int(fields["soil"]), "light": int(fields["light"])}
+        temp = None if fields.get("temp") in (None, "ERR") else float(fields["temp"])
+        humidity = None if fields.get("humidity") in (None, "ERR") else float(fields["humidity"])
+        return {
+            "soil": int(fields["soil"]),
+            "light": int(fields["light"]),
+            "temp": temp,
+            "humidity": humidity,
+        }
     except (ValueError, KeyError):
         return None
 
@@ -89,8 +97,13 @@ def run():
         # Status is recomputed from the averages so it matches what we store
         soil = round(mean(r["soil"] for r in window), 1)
         light = round(mean(r["light"] for r in window), 1)
-        db.insert_reading(soil, light, soil_status(soil), light_status(light))
-        log.info("soil=%s (%s) light=%s (%s)", soil, soil_status(soil), light, light_status(light))
+        temps = [r["temp"] for r in window if r["temp"] is not None]
+        humidities = [r["humidity"] for r in window if r["humidity"] is not None]
+        temp = round(mean(temps), 1) if temps else None
+        humidity = round(mean(humidities), 1) if humidities else None
+        db.insert_reading(soil, light, soil_status(soil), light_status(light), temp=temp, humidity=humidity)
+        log.info("soil=%s (%s) light=%s (%s) temp=%s humidity=%s",
+                 soil, soil_status(soil), light, light_status(light), temp, humidity)
         window.clear()
 
 

@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS readings (
     light        REAL    NOT NULL,
     status       TEXT    NOT NULL,
     light_status TEXT    NOT NULL,
+    temp         REAL,
+    humidity     REAL,
     sent         INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_readings_sent ON readings(sent);
@@ -51,13 +53,19 @@ def init():
         # WAL lets reader, camera and uploader run as separate processes without locking each other out
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(SCHEMA)
+        # Migrate existing readings table if temp/humidity columns are missing
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(readings)")}
+        if "temp" not in cols:
+            conn.execute("ALTER TABLE readings ADD COLUMN temp REAL")
+        if "humidity" not in cols:
+            conn.execute("ALTER TABLE readings ADD COLUMN humidity REAL")
 
 
-def insert_reading(soil, light, status, light_status, ts=None):
+def insert_reading(soil, light, status, light_status, temp=None, humidity=None, ts=None):
     with connect() as conn:
         conn.execute(
-            "INSERT INTO readings (ts, soil, light, status, light_status) VALUES (?, ?, ?, ?, ?)",
-            (ts or now(), soil, light, status, light_status),
+            "INSERT INTO readings (ts, soil, light, status, light_status, temp, humidity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (ts or now(), soil, light, status, light_status, temp, humidity),
         )
 
 
