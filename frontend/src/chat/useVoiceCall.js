@@ -59,16 +59,20 @@ export function useVoiceCall({ plantId, onTurn, silent = false }) {
     if (status === "connected") setVolume.current({ volume: silent ? 0 : 1 });
   }, [status, silent]);
 
+  const connected = status === "connected";
   return {
     start,
     end: conversation.endSession,
     sendText: conversation.sendUserMessage,
     connecting: starting || status === "connecting",
-    active: starting || status === "connecting" || status === "connected",
-    connected: status === "connected",
+    active: starting || status === "connecting" || connected,
+    connected,
     speaking: conversation.isSpeaking,
     muted: conversation.isMuted,
     setMuted: conversation.setMuted,
+    // 0-1 loudness of the kid's mic and the plant's voice, for the call's orb
+    inputVolume: () => (connected && !conversation.isMuted ? Math.min(1, conversation.getInputVolume() * 2) : 0),
+    outputVolume: () => (connected && !silent ? Math.min(1, outputVolume.current() * CALL_VOLUME_GAIN) : 0),
     error,
   };
 }
