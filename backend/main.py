@@ -419,6 +419,19 @@ def agent_chat_stream(chat: ChatIn, user_id: str = Depends(auth.current_user)):
     )
 
 
+@app.get("/agent/chat/history", dependencies=[Depends(owned_plant)])
+def get_chat_history(plant_id: str = Query(pattern=PLANT_ID), limit: int = Query(30, ge=1, le=200)):
+    """Past chat messages and notable check-ins, oldest first, so the chat picks up where it left off."""
+    return db.chat_history(plant_id, limit)
+
+
+@app.delete("/agent/chat/history", dependencies=[Depends(owned_plant)])
+def delete_chat_history(plant_id: str = Query(pattern=PLANT_ID)):
+    """Clear the chat: deletes the plant's chat messages and hides earlier check-ins."""
+    db.clear_chat(plant_id)
+    return {"ok": True}
+
+
 @app.post("/agent/check", dependencies=[Depends(require_key)])
 def agent_check(plant_id: str = Query(pattern=PLANT_ID)):
     """Run the routine check now (the same thing AGENT_CHECK_MINUTES runs on a timer)."""

@@ -224,7 +224,7 @@ export default function Dashboard({ plants, onSelectPlant, onAddPlant, onPlantCh
           )}
         >
           <Suspense fallback={<div className="glass-strong h-full rounded-t-[28px] lg:rounded-[28px]" />}>
-            <ChatPanel plantId={plant.id} name={plant.name} onClose={() => setChatOpen(false)} />
+            <ChatPanel key={plant.id} plantId={plant.id} name={plant.name} onClose={() => setChatOpen(false)} />
           </Suspense>
         </div>
       </div>

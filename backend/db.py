@@ -70,6 +70,13 @@ CREATE TABLE IF NOT EXISTS agent_events (
     data     TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_agent_events_plant_kind ON agent_events(plant_id, kind);
+
+-- Where each plant's chat was last cleared; check-ins from before then stay out of the chat
+CREATE TABLE IF NOT EXISTS chat_cleared (
+    plant_id    TEXT PRIMARY KEY,
+    ts          TEXT NOT NULL,
+    last_run_id INTEGER NOT NULL           -- newest agent_runs.id at the time
+);
 """
 
 
@@ -300,6 +307,38 @@ def list_agent_runs(plant_id, limit):
             "SELECT * FROM agent_runs WHERE plant_id = ? ORDER BY id DESC LIMIT ?", (plant_id, limit)
         )
         return [_json_fields(r, "actions") for r in rows]
+
+
+# Scheduled checks that did one of these show up in the chat ("while you were away..."); the rest are just noise
+CHAT_CHECK_TOOLS = ("water_plant", "record_skipped_watering", "send_alert")
+
+
+def chat_history(plant_id, limit):
+    """The chat's past messages, oldest first: chat runs plus check runs that did something, since the last clear."""
+    marks = ",".join("?" * len(CHAT_CHECK_TOOLS))
+    with connect() as conn:
+        cleared = conn.execute("SELECT last_run_id FROM chat_cleared WHERE plant_id = ?", (plant_id,)).fetchone()
+        rows = conn.execute(
+            f"""SELECT * FROM agent_runs
+                WHERE plant_id = ? AND id > ? AND reply IS NOT NULL
+                  AND (trigger = 'chat' OR (trigger = 'check' AND EXISTS (
+                      SELECT 1 FROM json_each(actions) WHERE json_extract(value, '$.tool') IN ({marks}))))
+                ORDER BY id DESC LIMIT ?""",
+            (plant_id, cleared["last_run_id"] if cleared else 0, *CHAT_CHECK_TOOLS, limit),
+        )
+        return [_json_fields(r, "actions") for r in rows][::-1]
+
+
+def clear_chat(plant_id):
+    """Delete the plant's chat messages, and hide earlier check-ins from the chat."""
+    with connect() as conn:
+        conn.execute("DELETE FROM agent_runs WHERE plant_id = ? AND trigger = 'chat'", (plant_id,))
+        last_run_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM agent_runs").fetchone()[0]
+        conn.execute(
+            """INSERT INTO chat_cleared (plant_id, ts, last_run_id) VALUES (?, ?, ?)
+               ON CONFLICT(plant_id) DO UPDATE SET ts = excluded.ts, last_run_id = excluded.last_run_id""",
+            (plant_id, now(), last_run_id),
+        )
 
 
 def insert_event(plant_id, kind, message, data=None):

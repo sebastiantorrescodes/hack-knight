@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import { ConversationProvider } from "@elevenlabs/react";
-import { ArrowUp, Mic, MicOff, Phone, PhoneOff, Square, Volume2, VolumeX, X } from "lucide-react";
-import { signedUrl } from "../api";
+import { ArrowUp, Mic, MicOff, Phone, PhoneOff, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { clearChatHistory, getChatHistory, signedUrl } from "../api";
+import { timeAgo } from "../analytics/ranges";
 import { PlantChatTransport } from "./transport";
 import { useVoiceCall } from "./useVoiceCall";
 import { playWithVoice } from "../voice";
@@ -40,6 +41,31 @@ function describeTool(name, input, output) {
     default:
       return { icon: "🔧", text: name };
   }
+}
+
+/** Stored agent runs (from /agent/chat/history) as useChat messages, shaped like the ones the transport streams. */
+function runsToMessages(runs) {
+  return runs.flatMap((run) => {
+    const assistant = {
+      id: `run-${run.id}`,
+      role: "assistant",
+      metadata: run.trigger === "check" ? { checkIn: run.ts } : undefined,
+      parts: [
+        ...run.actions.map((a, i) => ({
+          type: "dynamic-tool",
+          toolCallId: `run-${run.id}-${i}`,
+          toolName: a.tool,
+          state: "output-available",
+          input: a.args,
+          output: a.result,
+        })),
+        { type: "text", text: run.reply },
+      ],
+    };
+    // A check-in has no question: the plant did it on its own
+    if (run.trigger === "check") return [assistant];
+    return [{ id: `run-${run.id}-q`, role: "user", parts: [{ type: "text", text: run.prompt }] }, assistant];
+  });
 }
 
 const CHIP_TONE = {
@@ -169,7 +195,7 @@ function ChatPanelBody({ plantId, name, onClose }) {
   const voiceRef = useRef(voice);
   voiceRef.current = voice;
 
-  const { messages, sendMessage, status, error, stop } = useChat({
+  const { messages, setMessages, sendMessage, status, error, stop } = useChat({
     transport,
     onFinish: ({ message }) => {
       const text = message.parts.filter((p) => p.type === "text").map((p) => p.text).join("");
@@ -181,6 +207,20 @@ function ChatPanelBody({ plantId, name, onClose }) {
     if (!voice) stopSpeaking();
   }, [voice]);
   useEffect(() => stopSpeaking, []); // closing the chat stops the plant mid-sentence
+
+  // Pick up where the last visit left off. Anything sent before the history arrives stays after it.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getChatHistory(plantId)
+      .then((runs) => !cancelled && setMessages((current) => [...runsToMessages(runs), ...current]))
+      .catch(() => {}) // no history is fine: the chat still works
+      .finally(() => !cancelled && setHistoryLoaded(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [plantId, setMessages]);
+
   const [input, setInput] = useState("");
   const endRef = useRef(null);
   const busy = status === "submitted" || status === "streaming";
@@ -210,6 +250,20 @@ function ChatPanelBody({ plantId, name, onClose }) {
     } else return;
     setInput("");
   }, [busy, sendMessage, call, addTurn]);
+
+  const [clearError, setClearError] = useState(null);
+  const clearChat = async () => {
+    if (!window.confirm(`Clear your chat with ${name}? This deletes the messages for good.`)) return;
+    try {
+      await clearChatHistory(plantId);
+      stopSpeaking();
+      setMessages([]);
+      setVoiceTurns([]);
+      setClearError(null);
+    } catch (err) {
+      setClearError(err.message);
+    }
+  };
 
   const { listening, supported: micSupported, start: startMic, stop: stopMic } = useSpeech({
     onResult: (transcript) => setInput(transcript),
@@ -255,6 +309,17 @@ function ChatPanelBody({ plantId, name, onClose }) {
           >
             {voice ? <Volume2 /> : <VolumeX />}
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full"
+            onClick={clearChat}
+            disabled={busy || call.active || (messages.length === 0 && voiceTurns.length === 0)}
+            aria-label="Clear chat"
+            title="Clear chat"
+          >
+            <Trash2 />
+          </Button>
           {onClose && (
             <Button variant="ghost" size="icon" className="rounded-full lg:hidden" onClick={onClose} aria-label="Close chat">
               <X />
@@ -265,7 +330,7 @@ function ChatPanelBody({ plantId, name, onClose }) {
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex min-h-full flex-col gap-2.5 p-4" aria-live="polite">
-          {messages.length === 0 && voiceTurns.length === 0 && (
+          {historyLoaded && messages.length === 0 && voiceTurns.length === 0 && (
             <div className="my-auto flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
               <span className="text-5xl">🪴</span>
               <p className="max-w-60 text-[15px]">Hi! I'm {name}. Ask me how I'm doing, or tell me to pour some water!</p>
@@ -276,6 +341,11 @@ function ChatPanelBody({ plantId, name, onClose }) {
             const mine = m.role === "user";
             return (
               <div key={m.id} className={cn("flex max-w-[85%] flex-col gap-1.5", mine ? "items-end self-end" : "items-start self-start")}>
+                {m.metadata?.checkIn && (
+                  <p className="px-1 text-xs font-semibold text-muted-foreground">
+                    🌙 While you were away · {timeAgo(m.metadata.checkIn)}
+                  </p>
+                )}
                 {m.parts.map((part, i) => {
                   if (part.type === "dynamic-tool") return <ToolChip key={i} part={part} />;
                   if (part.type === "text" && part.text)
@@ -328,6 +398,7 @@ function ChatPanelBody({ plantId, name, onClose }) {
           )}
           {error && <div className="rounded-2xl bg-ios-red/10 px-3 py-2 text-sm text-ios-red">😵 {error.message}</div>}
           {call.error && <div className="rounded-2xl bg-ios-red/10 px-3 py-2 text-sm text-ios-red">📞 {call.error}</div>}
+          {clearError && <div className="rounded-2xl bg-ios-red/10 px-3 py-2 text-sm text-ios-red">🗑️ Couldn't clear the chat: {clearError}</div>}
           <div ref={endRef} />
         </div>
       </ScrollArea>

@@ -59,6 +59,10 @@ export const claimPlant = (plant) => post("/plants", plant);
 export const updatePlant = (id, fields) => request(`/plants/${encodeURIComponent(id)}`, { method: "PATCH", body: fields });
 export const searchPlaces = (q) => get(`/geocode?${new URLSearchParams({ q })}`);
 export const getHealth = () => get("/health");
+/** Past chat messages and notable check-ins for a plant, oldest first. */
+export const getChatHistory = (plantId) => get(`/agent/chat/history?${new URLSearchParams({ plant_id: plantId })}`);
+export const clearChatHistory = (plantId) =>
+  request(`/agent/chat/history?${new URLSearchParams({ plant_id: plantId })}`, { method: "DELETE" });
 /** Token and prompt variables for a live ElevenLabs voice call with this plant. */
 export const getVoiceSession = (plantId) => get(`/voice/session?${new URLSearchParams({ plant_id: plantId })}`);
 

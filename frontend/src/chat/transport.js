@@ -21,6 +21,7 @@ export class PlantChatTransport {
     const last = messages[messages.length - 1];
     const history = messages
       .slice(0, -1)
+      .filter((m) => !m.metadata?.checkIn) // check-ins weren't part of the conversation
       .slice(-HISTORY_TURNS)
       .map((m) => ({ role: m.role === "user" ? "user" : "model", text: textOf(m) }))
       .filter((m) => m.text);
