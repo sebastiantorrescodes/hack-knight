@@ -5,6 +5,7 @@ import { ArrowUp, Mic, MicOff, Phone, PhoneOff, Square, Volume2, VolumeX, X } fr
 import { signedUrl } from "../api";
 import { PlantChatTransport } from "./transport";
 import { useVoiceCall } from "./useVoiceCall";
+import { playWithVoice } from "../voice";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -63,8 +64,10 @@ function ToolChip({ part }) {
 }
 
 async function speak(text) {
-  const audio = new Audio(await signedUrl(`/tts?${new URLSearchParams({ text: text.slice(0, 600) })}`));
-  audio.play().catch(() => {}); // no voice configured or autoplay blocked: the text is still on screen
+  const audio = new Audio();
+  audio.crossOrigin = "anonymous"; // lets playWithVoice read the loudness for the plant's mouth
+  audio.src = await signedUrl(`/tts?${new URLSearchParams({ text: text.slice(0, 600) })}`);
+  playWithVoice(audio).catch(() => {}); // no voice configured or autoplay blocked: the text is still on screen
 }
 
 /** Hook that wires up the browser's SpeechRecognition API. */

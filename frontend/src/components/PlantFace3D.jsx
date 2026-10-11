@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
+import { voiceLevel } from "../voice";
 
 // The 3D version of PlantFace: same moods, same face. Faces are drawn in PlantFace's SVG coordinates
 // (viewBox 200x230) and wrapped onto the front of the pot, so both versions keep the same expressions.
@@ -137,16 +138,59 @@ function Smile() {
   return <mesh geometry={geometry} material={mouthMat} />;
 }
 
+function FacePart({ part }) {
+  if (part.type === "dot") return <Dot {...part} />;
+  if (part.type === "smile") return <Smile />;
+  return <Tube points={part.pts.map(([x, y]) => onPot(x, y))} />;
+}
+
+const talkMat = new THREE.MeshStandardMaterial({ color: "#6d1f1f", roughness: 0.5 });
+const tongueMat = new THREE.MeshStandardMaterial({ color: "#e57373", roughness: 0.6 });
+const TALK_POINT = onPot(100, 182, 0.012);
+
+/**
+ * While the plant's voice plays (voice.js), swap the mood mouth for an open one that follows the loudness.
+ * Runs in the frame loop, so speaking never re-renders React.
+ */
+function TalkingMouth({ moodMouth }) {
+  const mouth = useRef();
+  const level = useRef(0);
+  useFrame(() => {
+    const target = voiceLevel();
+    // Open fast, close a little slower, like a real mouth between syllables
+    level.current += (target - level.current) * (target > level.current ? 0.6 : 0.25);
+    const talking = level.current > 0.03;
+    mouth.current.visible = talking;
+    moodMouth.current.visible = !talking;
+    if (talking) {
+      const open = Math.min(level.current, 1);
+      mouth.current.scale.set(0.15 + open * 0.04, 0.03 + open * 0.13, 0.04);
+    }
+  });
+  return (
+    <group ref={mouth} position={TALK_POINT} rotation={[0, Math.atan2(TALK_POINT.x, TALK_POINT.z), 0]} visible={false}>
+      <mesh material={talkMat}>
+        <sphereGeometry args={[1, 24, 16]} />
+      </mesh>
+      <mesh position={[0, -0.45, 0.3]} scale={[0.6, 0.4, 0.6]} material={tongueMat}>
+        <sphereGeometry args={[1, 16, 12]} />
+      </mesh>
+    </group>
+  );
+}
+
 function Face({ mood }) {
-  const parts = [...(EYES[mood] ?? EYES.okay), ...(MOUTHS[mood] ?? MOUTHS.okay)];
+  const eyes = EYES[mood] ?? EYES.okay;
+  const mouth = MOUTHS[mood] ?? MOUTHS.okay;
+  const moodMouth = useRef();
   const cheeks = mood === "happy" || mood === "okay";
   return (
     <group>
-      {parts.map((part, i) => {
-        if (part.type === "dot") return <Dot key={`${mood}-${i}`} {...part} />;
-        if (part.type === "smile") return <Smile key={`${mood}-${i}`} />;
-        return <Tube key={`${mood}-${i}`} points={part.pts.map(([x, y]) => onPot(x, y))} />;
-      })}
+      {eyes.map((part, i) => <FacePart key={`${mood}-eye-${i}`} part={part} />)}
+      <group ref={moodMouth}>
+        {mouth.map((part, i) => <FacePart key={`${mood}-mouth-${i}`} part={part} />)}
+      </group>
+      <TalkingMouth moodMouth={moodMouth} />
       {cheeks && (
         <>
           <Dot x={62} y={174} r={9} material={cheekMat} />
@@ -321,6 +365,7 @@ function Plant({ mood }) {
       tilt = 0.06;
     }
 
+    y += voiceLevel() * 0.04; // a little bob while talking
     g.position.y += (y - g.position.y) * (mood === "happy" ? 1 : k);
     g.position.x = shiver;
     g.rotation.z += (tilt - g.rotation.z) * k;

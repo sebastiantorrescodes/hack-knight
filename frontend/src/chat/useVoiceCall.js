@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { getVoiceSession } from "../api";
+import { setVoiceSource } from "../voice";
+
+const CALL_VOLUME_GAIN = 2.5; // getOutputVolume() stays well under 1 for normal speech
 
 /**
  * A live speech-to-speech call with the plant's ElevenLabs agent. Must be inside a ConversationProvider.
@@ -40,6 +43,15 @@ export function useVoiceCall({ plantId, onTurn }) {
   };
 
   const { status } = conversation;
+
+  // While connected, the agent's output volume is the plant's voice (moves the 3D plant's mouth)
+  const outputVolume = useRef(conversation.getOutputVolume);
+  outputVolume.current = conversation.getOutputVolume;
+  useEffect(() => {
+    if (status !== "connected") return;
+    return setVoiceSource(() => outputVolume.current() * CALL_VOLUME_GAIN);
+  }, [status]);
+
   return {
     start,
     end: conversation.endSession,
