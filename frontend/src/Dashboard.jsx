@@ -6,7 +6,7 @@ import { usePlant } from "./PlantContext";
 import usePoll from "./usePoll";
 import { explain, getMood } from "./plant";
 import Mesh from "./components/Mesh";
-import PlantFace from "./components/PlantFace";
+import PlantAvatar from "./components/PlantAvatar";
 import Meters from "./components/Meters";
 import PlantCam from "./components/PlantCam";
 import Analytics from "./analytics/Analytics";
@@ -63,7 +63,7 @@ function PlantView({ name, status, error }) {
               <path d="M0 0 H24 L14 10.5 Q12 12.5 10 10.5 Z" fill="var(--glass-bg-strong)" />
             </svg>
           </div>
-          <PlantFace mood={mood.key} />
+          <PlantAvatar mood={mood.key} />
         </section>
         <PlantCam name={name} />
       </div>
